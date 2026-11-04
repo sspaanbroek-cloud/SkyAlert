@@ -10,6 +10,8 @@
 	--ok-bg: #e7f4ec;
 	--ok-text: #1b6b3a;
 	--err-bg: #fbeaea;
+	--warn-bg: #fdf1d8;
+	--warn-text: #8a5a00;
 	--radius: 10px;
 	color-scheme: light;
 }
@@ -26,6 +28,8 @@
 		--ok-bg: #12301f;
 		--ok-text: #8fdcab;
 		--err-bg: #3a1716;
+		--warn-bg: #3a2c0d;
+		--warn-text: #f2c66d;
 		color-scheme: dark;
 	}
 }

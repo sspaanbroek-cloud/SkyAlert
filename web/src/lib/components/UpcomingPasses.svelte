@@ -1,9 +1,10 @@
 <script lang="ts">
-	import { formatFt } from '#lib/geo.ts';
 	import {
+		RATING_LABEL,
 		clockTime,
+		headline,
+		weatherSource,
 		confidenceLabel,
-		flightLabel,
 		listUpcomingPasses,
 		lookLabel,
 		whenLabel,
@@ -58,20 +59,21 @@
 				{@const when = whenLabel(p.closest_approach_at, now)}
 				{@const look = lookLabel(p)}
 				{@const conf = confidenceLabel(p.confidence)}
+				{@const a = p.assessment}
 				<li class:now={when === 'Passing now'} class:past={when === 'Just passed'}>
 					<div class="head">
-						<strong>{flightLabel(p)}</strong>
+						<span class="rating rating-{a?.rating ?? 'unknown'}">{RATING_LABEL[a?.rating ?? 'unknown']}</span>
 						<span class="when">{when}</span>
-						<span class="hint">{clockTime(p.closest_approach_at)}</span>
 					</div>
-					<p class="detail">
-						{[p.altitude_ft != null ? formatFt(p.altitude_ft) : null, `passes ${p.closest_distance_nm.toFixed(1)} nm away`]
-							.filter(Boolean)
-							.join(', ')}
-					</p>
-					{#if look}<p class="detail">{look}</p>{/if}
+					<p class="detail"><strong>{headline(p)}</strong></p>
+					{#if a}
+						<p class="detail">{a.explanation}</p>
+					{:else}
+						<p class="detail hint">Checking the weather for this pass…</p>
+					{/if}
+					<p class="detail">{[look, `${p.closest_distance_nm.toFixed(1)} nm from you`].filter(Boolean).join(', ')}</p>
 					<p class="hint">
-						{p.basis === 'live_adsb' ? 'Live tracking' : 'Filed flight plan'}{#if conf}&ensp;·&ensp;{conf} confidence{/if}
+						{p.basis === 'live_adsb' ? 'Live tracking' : 'Filed flight plan'}{#if conf}&ensp;·&ensp;{conf} confidence{/if}{#if a && weatherSource(a)}&ensp;·&ensp;{weatherSource(a)}{/if}
 					</p>
 				</li>
 			{/each}
@@ -104,6 +106,29 @@
 	.when {
 		font-weight: 600;
 		color: var(--accent);
+	}
+	.rating {
+		font-size: 0.8125rem;
+		font-weight: 700;
+		padding: 2px 8px;
+		border-radius: 999px;
+	}
+	.rating-clear {
+		background: var(--ok-bg);
+		color: var(--ok-text);
+	}
+	.rating-partial {
+		background: var(--warn-bg);
+		color: var(--warn-text);
+	}
+	.rating-hidden {
+		background: var(--err-bg);
+		color: var(--danger);
+	}
+	.rating-unknown {
+		background: var(--bg);
+		color: var(--muted);
+		border: 1px solid var(--border);
 	}
 	li.now .when {
 		color: var(--ok-text);

@@ -19,6 +19,7 @@ function setup(states: (b: unknown) => Promise<{ states: unknown[]; creditsRemai
 				const n = (args!.points as unknown[]).length;
 				return { data: { inserted: n, duplicate: 0, invalid: 0 } as T, error: null };
 			}
+			if (fn === 'refresh_visibility_assessments') return { data: { clear: 1, partial: 0, hidden: 0, unknown: 0 } as T, error: null };
 			return { data: { inserted: 1, updated: 0, removed: 0, too_low: 0 } as T, error: null };
 		}
 	});
@@ -46,7 +47,10 @@ Deno.test('stores positions, dedupes boxes, recomputes predictions', async () =>
 	assert.equal(body.states, 6);
 	assert.equal(body.positions, 2);
 	assert.deepEqual(body.predictions, { inserted: 1, updated: 0, removed: 0, too_low: 0 });
-	assert.deepEqual(calls.map((c) => c.fn), ['adsb_fetch_areas', 'ingest_track_points', 'compute_live_predictions']);
+	assert.deepEqual(calls.map((c) => c.fn), [
+		'adsb_fetch_areas', 'ingest_track_points', 'compute_live_predictions', 'refresh_visibility_assessments'
+	]);
+	assert.deepEqual(body.visibility, { clear: 1, partial: 0, hidden: 0, unknown: 0 });
 	const pts = calls[1].args!.points as { icao24: string; altitude_ft: number }[];
 	assert.deepEqual(pts.map((p) => p.icao24), ['a00001', 'a00002']);
 	assert.equal(pts[0].altitude_ft, 29528);

@@ -76,6 +76,13 @@ export function createHandler(deps: Deps) {
 			predictions = res.data;
 		}
 
+		let visibility: unknown = null;
+		if (boxes.length > 0) {
+			const res = await deps.rpc('refresh_visibility_assessments');
+			if (res.error) return json(500, { error: `refresh_visibility_assessments: ${res.error.message}`, stored, predictions });
+			visibility = res.data;
+		}
+
 		const summary = {
 			areas: boxes.length,
 			authenticated: deps.opensky.authenticated,
@@ -85,6 +92,7 @@ export function createHandler(deps: Deps) {
 			positions: records.length,
 			...stored,
 			predictions,
+			visibility,
 			rate_limited: rateLimited !== undefined,
 			retry_after_s: rateLimited ?? null,
 			fetch_errors: fetchErrors

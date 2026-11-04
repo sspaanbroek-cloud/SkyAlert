@@ -1,6 +1,18 @@
 import { supabase } from './supabase';
 import { compass } from './weather';
 
+export type Rating = 'clear' | 'partial' | 'hidden' | 'unknown';
+
+export interface Assessment {
+	rating: Rating;
+	explanation: string;
+	high_cloud_caveat: boolean;
+	metar_station: string | null;
+	obs_age_min: number | null;
+	stations_used: string[];
+	computed_at: string;
+}
+
 export interface Pass {
 	id: number;
 	basis: 'live_adsb' | 'filed_plan';
@@ -14,10 +26,12 @@ export interface Pass {
 	elevation_deg: number | null;
 	confidence: number | null;
 	computed_at: string;
+	assessment: Assessment | null;
 }
 
 const COLUMNS =
-	'id, basis, callsign, icao24, aircraft_type, closest_approach_at, closest_distance_nm, altitude_ft, azimuth_deg, elevation_deg, confidence, computed_at';
+	'id, basis, callsign, icao24, aircraft_type, closest_approach_at, closest_distance_nm, altitude_ft, azimuth_deg, elevation_deg, confidence, computed_at, ' +
+	'visibility_assessment(rating, explanation, high_cloud_caveat, metar_station, obs_age_min, stations_used, computed_at)';
 
 /** Passes from 2 minutes ago onwards, soonest first. RLS limits this to your own spots. */
 export async function listUpcomingPasses(spotId: string, now = new Date()): Promise<Pass[]> {
@@ -30,8 +44,11 @@ export async function listUpcomingPasses(spotId: string, now = new Date()): Prom
 		.order('closest_approach_at')
 		.limit(20);
 	if (error) throw error;
-	return (data ?? []).map((p) => ({
+	const rows = (data ?? []) as unknown as (Record<string, unknown> & { visibility_assessment: unknown })[];
+	return rows.map(({ visibility_assessment: va, ...p }) => ({
 		...p,
+		// one-to-one embed: PostgREST returns an object, older versions an array
+		assessment: (Array.isArray(va) ? (va[0] ?? null) : (va ?? null)) as Assessment | null,
 		closest_distance_nm: Number(p.closest_distance_nm),
 		azimuth_deg: p.azimuth_deg == null ? null : Number(p.azimuth_deg),
 		elevation_deg: p.elevation_deg == null ? null : Number(p.elevation_deg),
@@ -70,3 +87,22 @@ export function confidenceLabel(c: number | null): 'High' | 'Medium' | 'Low' | n
 }
 
 export const flightLabel = (p: Pick<Pass, 'callsign' | 'icao24'>) => p.callsign ?? p.icao24?.toUpperCase() ?? 'Unknown aircraft';
+
+export const RATING_LABEL: Record<Rating, string> = {
+	clear: 'Clear view',
+	partial: 'Partly visible',
+	hidden: 'Hidden by cloud',
+	unknown: 'Visibility unknown'
+};
+
+/** "ASA123, 33,000 ft, passes at 7:42 pm." */
+export function headline(p: Pick<Pass, 'callsign' | 'icao24' | 'altitude_ft' | 'closest_approach_at'>, timeZone?: string) {
+	const alt = p.altitude_ft != null ? `${Math.round(p.altitude_ft).toLocaleString('en-US')} ft, ` : '';
+	return `${flightLabel(p)}, ${alt}passes at ${clockTime(p.closest_approach_at, timeZone)}.`;
+}
+
+export function weatherSource(a: Pick<Assessment, 'metar_station' | 'obs_age_min'>): string | null {
+	if (!a.metar_station) return null;
+	const age = a.obs_age_min == null ? '' : a.obs_age_min < 1 ? ', just now' : `, ${a.obs_age_min} min old`;
+	return `Weather from ${a.metar_station}${age}`;
+}

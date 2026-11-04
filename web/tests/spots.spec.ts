@@ -132,10 +132,13 @@ test('spot page lists upcoming passes with where to look', async ({ page }) => {
 		passes: [
 			{ id: 1, basis: 'live_adsb', callsign: 'ASA123', icao24: 'a1b2c3', aircraft_type: null,
 			  closest_approach_at: soon(0.3), closest_distance_nm: 0.4, altitude_ft: 10000, azimuth_deg: 12,
-			  elevation_deg: 84, confidence: 0.92, computed_at: soon(0) },
+			  elevation_deg: 84, confidence: 0.92, computed_at: soon(0),
+			  visibility_assessment: { rating: 'partial', high_cloud_caveat: false, metar_station: 'KBFI', obs_age_min: 12,
+			    stations_used: ['KBFI', 'KRNT'], computed_at: soon(0),
+			    explanation: 'Mostly cloudy at about 6,000 ft, so the aircraft will be above the clouds and visible only through gaps.' } },
 			{ id: 2, basis: 'live_adsb', callsign: null, icao24: 'c0ffee', aircraft_type: null,
 			  closest_approach_at: soon(6.2), closest_distance_nm: 4.95, altitude_ft: 35000, azimuth_deg: 90,
-			  elevation_deg: 48.8, confidence: 0.62, computed_at: soon(0) }
+			  elevation_deg: 48.8, confidence: 0.62, computed_at: soon(0), visibility_assessment: null }
 		]
 	});
 	await signIn(page);
@@ -150,14 +153,19 @@ test('spot page lists upcoming passes with where to look', async ({ page }) => {
 	const list = page.getByRole('region', { name: 'Coming overhead' });
 	await expect(list.getByText('ASA123')).toBeVisible();
 	await expect(list.getByText('Passing now')).toBeVisible();
-	await expect(list.getByText('Straight overhead')).toBeVisible();
-	await expect(list.getByText('C0FFEE')).toBeVisible();
+	await expect(list.getByText('Straight overhead, 0.4 nm from you')).toBeVisible();
+	await expect(list.getByText('Partly visible')).toBeVisible();
+	await expect(list.getByText('visible only through gaps')).toBeVisible();
+	await expect(list.getByText('Live tracking · High confidence · Weather from KBFI, 12 min old')).toBeVisible();
+	await expect(list.getByText(/^C0FFEE, 35,000 ft, passes at /)).toBeVisible();
 	await expect(list.getByText('in 6 min')).toBeVisible();
-	await expect(list.getByText('35,000 ft, passes 5.0 nm away')).toBeVisible();
-	await expect(list.getByText('Look E (90°), 49° above the horizon')).toBeVisible();
+	await expect(list.getByText('Look E (90°), 49° above the horizon, 5.0 nm from you')).toBeVisible();
+	await expect(list.getByText('Visibility unknown')).toBeVisible();
+	await expect(list.getByText('Checking the weather for this pass…')).toBeVisible();
 	await expect(list.getByText('Live tracking · Medium confidence')).toBeVisible();
 	const q = backend.writes.find((w) => w.method === 'GET overflight_prediction')!.body as Record<string, string>;
 	expect(q.spot_id).toBe(`eq.${backend.spots[0].id}`);
 	expect(q.order).toBe('closest_approach_at.asc');
+	expect(q.select).toContain('visibility_assessment(rating,explanation');
 	await page.getByRole('region', { name: 'Coming overhead' }).screenshot({ path: 'test-results/passes.png' });
 });

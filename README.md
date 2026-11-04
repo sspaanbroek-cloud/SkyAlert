@@ -18,6 +18,7 @@ supabase/
     …_metar_ingest.sql ingest_metars(), sky_summary(), nearby_weather()
     …_schedules.sql    pg_cron jobs (METAR every 10 min, purges)
     …_adsb.sql         ingest_track_points(), compute_live_predictions(), ADS-B schedule
+    …_visibility.sql   rate_sky(), assess_visibility(), refresh_visibility_assessments()
   functions/
     _shared/metar.ts   METAR parser (sky from raw text, numbers from AWC JSON)
     _shared/awc.ts     Aviation Weather Center client
@@ -211,7 +212,53 @@ supabase functions deploy ingest-adsb
 supabase secrets set OPENSKY_CLIENT_ID=... OPENSKY_CLIENT_SECRET=...
 ```
 
-It uses the same `INGEST_SECRET` and Vault secrets as the METAR job.
+OpenSky's API-client download is a `credentials.json` with `clientId` and
+`clientSecret`; those are the two values. Never commit that file
+(`credentials*.json` is git-ignored). It uses the same `INGEST_SECRET` and
+Vault secrets as the METAR job.
+
+## Visibility rating (clear / partial / hidden)
+
+`refresh_visibility_assessments()` re-rates every pass from 5 minutes ago
+onwards. Both workers call it: `ingest-adsb` after new positions,
+`ingest-metar` after new weather.
+
+Per pass:
+
+1. Take the latest report (up to 2 hours old) from up to 3 stations within
+   40 nm of the spot. The line of sight from the spot crosses low and mid
+   cloud close to the spot, so the spot is the reference point.
+2. `rate_sky()` compares each station's cloud bases (MSL = AGL + field
+   elevation) with the aircraft's altitude. METAR cover is cumulative, so the
+   largest cover among layers below the aircraft decides:
+
+   | Below the aircraft | Rating |
+   |---|---|
+   | nothing, or cloud only above it | clear |
+   | FEW (a few wisps) | clear |
+   | SCT, BKN | partial (seen through gaps) |
+   | OVC, VV | hidden |
+
+   Visibility under 1 mile makes it hidden; under 3 miles turns clear into
+   partial. Cloud tops are never assumed. Automated stations (AUTO, or
+   CLR/NCD) can't see above 12,000 ft, so passes above that get
+   `high_cloud_caveat` and say so.
+3. Station ratings are blended, weighted by 1/distance² (distance floored at
+   3 nm) and by report age (full weight to 60 min, 0.3 at 120 min). The
+   sentence comes from the strongest station that agrees with the result; if
+   others disagree, the explanation says conditions may be patchy.
+
+Explanations give cloud heights above sea level, rounded to 100 ft, so they
+compare directly with the aircraft's altitude. The app shows them as, for
+example:
+
+> **Partly visible** · ASA123, 33,000 ft, passes at 7:42 pm.
+> Mostly cloudy at about 6,400 ft, so the aircraft will be above the clouds
+> and visible only through gaps.
+
+The thresholds live in `rate_sky()`. Note: the brief listed BKN under
+"hidden" but its own example treats BKN as visible through gaps; this
+follows the example.
 
 ## Web app notes
 
@@ -231,13 +278,16 @@ It uses the same `INGEST_SECRET` and Vault secrets as the METAR job.
 - Each spot's page also shows "Coming overhead": predicted passes from 2
   minutes ago onwards, with time, altitude, distance, where to look (compass
   direction and angle above the horizon) and confidence. It refreshes every
-  30 seconds while the page is visible.
+  30 seconds while the page is visible. Each pass carries its rating badge
+  (Clear view / Partly visible / Hidden by cloud / Visibility unknown), the
+  explanation, and which station's report it's based on and how old it is.
 - `#lib/...` imports need the file extension (`#lib/geo.ts`): SvelteKit 3 uses
   Node subpath imports instead of the old `$lib` alias.
 
 ## Status
 
-Phase 1 steps 1 to 4 done (schema + auth, shooting spots, METAR ingest, live
-ADS-B predictions). Next: step 5, the clear / partial / hidden visibility
-rating per pass.
+Phase 1 done: schema + auth, shooting spots, METAR ingest, live ADS-B
+predictions, and the clear / partial / hidden rating per pass. Next is phase 2
+(filed flight plans and route resolution, recurring flights, TAF forecasts,
+high-cloud model data, push alerts).
 `taf_forecast` and `high_cloud_estimate` are deferred to phase 2.

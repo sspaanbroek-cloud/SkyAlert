@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { clockTime, confidenceLabel, flightLabel, lookLabel, whenLabel } from './passes';
+import { clockTime, confidenceLabel, flightLabel, headline, lookLabel, weatherSource, whenLabel } from './passes';
 
 const now = new Date('2026-11-04T19:36:00Z');
 const at = (s: number) => new Date(now.getTime() + s * 1000).toISOString();
@@ -25,5 +25,20 @@ describe('pass labels', () => {
 	it('flight label falls back to hex id', () => {
 		expect(flightLabel({ callsign: null, icao24: 'a1b2c3' })).toBe('A1B2C3');
 		expect(flightLabel({ callsign: 'ASA123', icao24: 'a1b2c3' })).toBe('ASA123');
+	});
+});
+
+describe('assessment text', () => {
+	it('headline matches the brief', () => {
+		expect(
+			headline(
+				{ callsign: 'ASA123', icao24: 'a1b2c3', altitude_ft: 33000, closest_approach_at: '2026-11-05T03:42:00Z' },
+				'America/Los_Angeles'
+			)
+		).toBe('ASA123, 33,000 ft, passes at 7:42 pm.');
+	});
+	it('weather source', () => {
+		expect(weatherSource({ metar_station: 'KBFI', obs_age_min: 12 })).toBe('Weather from KBFI, 12 min old');
+		expect(weatherSource({ metar_station: null, obs_age_min: null })).toBeNull();
 	});
 });

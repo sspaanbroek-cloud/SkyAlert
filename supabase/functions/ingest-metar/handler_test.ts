@@ -24,6 +24,7 @@ function setup(opts: { awc?: (url: string, init?: RequestInit) => Response; boxe
 		rpc: async <T>(fn: string, args?: Record<string, unknown>) => {
 			calls.push({ fn, args });
 			if (fn === 'metar_fetch_areas') return { data: (opts.boxes ?? [box]) as T, error: null };
+			if (fn === 'refresh_visibility_assessments') return { data: { clear: 0, partial: 1, hidden: 0, unknown: 0 } as T, error: null };
 			const n = (args?.reports as unknown[]).length;
 			return { data: { stored: n, unchanged: 0, rejected: [] } as T, error: null };
 		}
@@ -63,6 +64,8 @@ Deno.test('fetches each area, dedupes overlaps, stores, reports', async () => {
 	const reports = ingest.args!.reports as { station: { icao: string }; layers: unknown[] }[];
 	assert.deepEqual(reports.map((r) => r.station.icao), ['KBFI', 'KRNT']);
 	assert.equal(reports[0].layers.length, 1);
+	assert.equal(calls.at(-1)!.fn, 'refresh_visibility_assessments');
+	assert.deepEqual(body.visibility, { clear: 0, partial: 1, hidden: 0, unknown: 0 });
 });
 
 Deno.test('no spots: nothing fetched', async () => {

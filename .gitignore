@@ -1,3 +1,6 @@
 
 # Edge Function local secrets
 supabase/functions/.env
+
+# API credentials (e.g. OpenSky credentials.json)
+credentials*.json

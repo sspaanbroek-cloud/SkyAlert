@@ -92,6 +92,10 @@ export function createHandler(deps: Deps) {
 			total.rejected.push(...res.data.rejected);
 		}
 
+		// New weather: re-rate passes that are coming up.
+		const vis = await deps.rpc<Record<string, number>>('refresh_visibility_assessments');
+		if (vis.error) return json(500, { error: `refresh_visibility_assessments: ${vis.error.message}`, ...total });
+
 		const summary = {
 			areas: boxes.length,
 			fetched: raw.length,
@@ -100,6 +104,7 @@ export function createHandler(deps: Deps) {
 			unchanged: total.unchanged,
 			parse_rejected: parseRejected,
 			db_rejected: total.rejected,
+			visibility: vis.data,
 			fetch_errors: fetchErrors
 		};
 		if (parseRejected.length || total.rejected.length || fetchErrors.length) log('ingest-metar: partial', summary);
