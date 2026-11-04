@@ -1,0 +1,4 @@
+"EFF_DATE","FIX_ID","ICAO_REGION_CODE","STATE_CODE","COUNTRY_CODE","LAT_DEG","LAT_MIN","LAT_SEC","LAT_HEMIS","LAT_DECIMAL","LONG_DEG","LONG_MIN","LONG_SEC","LONG_HEMIS","LONG_DECIMAL"
+"2026/10/30","SUMMA","K1","WA","US","47","17","0","N","47.2833","122","14","0","W","-122.2333"
+"2026/10/30","OLM","K7","FL","US","28","0","0","N","28.0","81","0","0","W","-81.0"
+"2026/10/30","BAD","K1","WA","US","","","","N","","","","","W",""

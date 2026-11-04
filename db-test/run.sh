@@ -28,6 +28,12 @@ if [ -n "$DENO" ]; then
   echo "test: contract (TAF parser -> ingest_tafs -> rate_taf)"
   PAYLOAD="$(DENO_NO_UPDATE_CHECK=1 "$DENO" run --quiet --no-prompt "$ROOT/db-test/contract_taf.ts")"
   "${PSQL[@]}" -t -A -v payload="$PAYLOAD" -f "$ROOT/db-test/contract_taf.sql" | grep -v '^$'
+  echo "test: contract (NASR convert.ts -> load.sh -> resolve_route)"
+  NASR_OUT="$WORK/nasr"
+  DENO_NO_UPDATE_CHECK=1 "$DENO" run --quiet --allow-read --allow-write "$ROOT/tools/nasr/convert.ts" "$ROOT/tools/nasr/testdata" "$NASR_OUT" 2026-10-30 >/dev/null
+  chmod -R a+rX "$NASR_OUT"
+  "$ROOT/tools/nasr/load.sh" "$NASR_OUT" -h "$WORK" -p "$PORT" -U postgres -d postgres >/dev/null
+  "${PSQL[@]}" -t -A -f "$ROOT/db-test/contract_nasr.sql" | grep -v '^$'
 else
   echo "skip: contract test (no deno)"
 fi

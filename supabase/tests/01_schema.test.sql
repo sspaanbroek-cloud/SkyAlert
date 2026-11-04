@@ -13,7 +13,7 @@ select ok(
 
 select is(
   (select count(*)::int from pg_indexes where schemaname = 'public' and indexdef ilike '%using gist%'),
-  5, 'GiST indexes on all searched geography columns (airport, spot, route, waypoint, track)');
+  6, 'GiST indexes on all searched geography columns (airport, spot, route, waypoint, track, nav_fix)');
 
 -- Cloud layer derivation: AGL -> MSL using station elevation, plain label, fractions.
 insert into metar_observation (station, observed_at, raw_text, is_auto)

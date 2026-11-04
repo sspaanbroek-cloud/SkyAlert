@@ -54,6 +54,10 @@ describe('day labels in the spot time zone', () => {
 	it('today is blank', () => expect(dayLabel('2026-11-05T03:42:00Z', now, tz)).toBe(''));
 	it('tomorrow', () => expect(dayLabel('2026-11-05T15:10:00Z', now, tz)).toBe('tomorrow'));
 	it('weekday further out', () => expect(dayLabel('2026-11-07T03:40:00Z', now, tz)).toBe('Fri'));
+	it('headline with aircraft type (filed plans)', () =>
+		expect(
+			headline({ callsign: 'ASA123', icao24: null, aircraft_type: 'B738', altitude_ft: 8000, closest_approach_at: '2026-11-05T03:42:00Z' }, tz, now)
+		).toBe('ASA123 (B738), 8,000 ft, passes at 7:42 pm.'));
 	it('headline with day', () =>
 		expect(
 			headline({ callsign: 'WKDY2', icao24: null, altitude_ft: null, closest_approach_at: '2026-11-05T15:10:00Z' }, tz, now)

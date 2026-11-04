@@ -23,6 +23,7 @@ supabase/
     …_taf.sql          TAF storage, rate_conditions(), rate_taf(), forecast-aware assess_visibility()
     …_model_cloud.sql  high_cloud_estimate, apply_model_cloud(), model-cloud schedule
     …_alerts.sql       push_subscription, spot alert settings, queue/claim/complete alerts
+    …_routes.sql       nav_fix/airway_fix (NASR), resolve_route(), ingest_flight_plans(), plan predictions
   functions/
     _shared/metar.ts   METAR parser (sky from raw text, numbers from AWC JSON)
     _shared/awc.ts     Aviation Weather Center client
@@ -32,11 +33,13 @@ supabase/
     _shared/openmeteo.ts Open-Meteo client (hourly low/mid/high cloud cover)
     ingest-adsb/       Edge Function: poll OpenSky, store positions, predict passes
     _shared/notify.ts  notification wording
+    _shared/flightplan.ts the source-neutral flight-plan record
     ingest-model-cloud/ Edge Function: model cloud per spot cell, re-rate passes
     send-alerts/       Edge Function: queue, claim and deliver alerts by Web Push
   seed.sql           dev data (aircraft types, two Seattle airports)
   tests/             pgTAP tests (`supabase test db`)
 db-test/             run migrations + tests on plain local Postgres, no Docker
+tools/nasr/          FAA NASR CSV -> nav_fix/airway_fix converter and loader
 web/                 SvelteKit app (static SPA, talks to Supabase directly)
   src/lib/           supabase client, auth state, spot data layer, geo helpers
   src/lib/components SpotMap (Leaflet), SpotForm
@@ -379,6 +382,65 @@ supabase functions deploy send-alerts
 
 Put the same public key in `web/.env.local` as `VITE_VAPID_PUBLIC_KEY`.
 
+## Routes and filed flight plans
+
+**Reference data (FAA NASR, every 28 days).** Download the CSV edition of the
+28-day NASR subscription from the FAA
+(https://www.faa.gov/air_traffic/flight_info/aeronav/aero_data/NASR_Subscription/),
+unzip it, then:
+
+```bash
+deno run --allow-read --allow-write tools/nasr/convert.ts path/to/CSV_Data nasr-out 2026-10-30
+```
+
+```bash
+DATABASE_URL='postgresql://...' tools/nasr/load.sh nasr-out
+```
+
+`convert.ts` reads `FIX_BASE.csv`, `NAV_BASE.csv`, `APT_BASE.csv` and
+`AWY_BASE.csv` (the `AIRWAY_STRING` column lists each airway's fixes in
+order). If FAA renames a column it stops and lists the columns it found.
+`load.sh` replaces the previous cycle in one transaction. Those column names
+follow FAA's documented CSV layout but haven't been checked against a live
+download yet (it's blocked from the build sandbox); the first real run will
+tell.
+
+**Route resolution.** `resolve_route(route, origin, destination)` returns the
+route's points:
+
+- tokens split on spaces or dots (`KSEA..SEA.J70.LKV..KSFO` works);
+- `DCT`, speed/level groups (`N0450F350`) and `/...` suffixes dropped;
+- airways expanded between their entry and exit fixes, either direction;
+- coordinates `4730N12216W`, `47N122W` and with seconds;
+- an identifier with several candidates (OLM in Washington and Florida)
+  resolves to the one nearest the previous point;
+- SIDs/STARs (`SUMMA1`, `HAWKZ7`) can't be expanded without procedure data,
+  so they're skipped and listed in the plan's `route_note`;
+- an airport's 3-letter FAA id (SEA for KSEA) is treated as the airport only
+  at the very start or end of the route and not right after an airway; mid-route
+  it's the VOR.
+
+**Ingest.** A plan source produces `FlightPlanInput` records
+(`supabase/functions/_shared/flightplan.ts`) and calls
+`ingest_flight_plans()`. That resolves the route, stores `route_geog` and the
+waypoints, and estimates each waypoint's time and altitude: off the ground 15
+minutes after the filed departure, the filed speed (420 kt if none), climbing
+about 300 ft per nm, descending on a 3° path (318 ft per nm), never above the
+filed cruise level. A plan's `route_status` is `resolved`, `partial` (some
+tokens unknown) or `failed`.
+
+**Predictions.** Every 10 minutes `compute_plan_predictions()` finds plans
+departing from 6 hours ago to 12 hours ahead whose route passes within a
+spot's radius, interpolates time and altitude at the closest point, and writes
+`basis = 'filed_plan'` passes (confidence at most 0.5, lower further ahead).
+When live tracking picks the flight up, the live pass replaces the plan pass
+(alerts carried over) and the plan pass isn't re-created.
+
+**Plan source: still to choose.** No adapter is wired up yet. FAA SWIM (SFDPS)
+is free but needs approval and an always-on JMS consumer; FlightAware AeroAPI
+is paid and immediate (its route endpoint also returns decoded fixes, which
+could skip NASR resolution). Either only needs to emit `FlightPlanInput`.
+
 ## Web app notes
 
 - Sign-in is email + password via Supabase Auth. If email confirmation is on
@@ -412,7 +474,8 @@ Put the same public key in `web/.env.local` as `VITE_VAPID_PUBLIC_KEY`.
 Phase 1 done: schema + auth, shooting spots, METAR ingest, live ADS-B
 predictions, and the clear / partial / hidden rating per pass.
 
-Phase 2, in order: recurring flights (done), TAF forecasts (done), high cloud from
-Open-Meteo (done), web push alerts (done), then NASR route resolution and filed flight
-plans (source to be chosen: FAA SWIM or FlightAware AeroAPI).
+Phase 2: recurring flights, TAF forecasts, high cloud from Open-Meteo, web
+push alerts, and NASR route resolution with the filed-plan pipeline are done.
+Remaining: a flight-plan source adapter (FAA SWIM or FlightAware AeroAPI, to
+be chosen).
 `taf_forecast` and `high_cloud_estimate` are deferred to phase 2.

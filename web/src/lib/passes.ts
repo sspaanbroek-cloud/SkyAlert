@@ -112,13 +112,14 @@ export function dayLabel(atIso: string, now: Date, timeZone?: string): string {
 
 /** "ASA123, 33,000 ft, passes at 7:42 pm." (or "passes tomorrow at ...") */
 export function headline(
-	p: Pick<Pass, 'callsign' | 'icao24' | 'altitude_ft' | 'closest_approach_at'>,
+	p: Pick<Pass, 'callsign' | 'icao24' | 'altitude_ft' | 'closest_approach_at'> & { aircraft_type?: string | null },
 	timeZone?: string,
 	now = new Date()
 ) {
 	const alt = p.altitude_ft != null ? `${Math.round(p.altitude_ft).toLocaleString('en-US')} ft, ` : '';
 	const day = dayLabel(p.closest_approach_at, now, timeZone);
-	return `${flightLabel(p)}, ${alt}passes ${day ? `${day} ` : ''}at ${clockTime(p.closest_approach_at, timeZone)}.`;
+	const type = p.aircraft_type ? ` (${p.aircraft_type})` : '';
+	return `${flightLabel(p)}${type}, ${alt}passes ${day ? `${day} ` : ''}at ${clockTime(p.closest_approach_at, timeZone)}.`;
 }
 
 export const BASIS_LABEL: Record<Pass['basis'], string> = {
