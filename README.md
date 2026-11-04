@@ -3,7 +3,8 @@
 Predicts when aircraft will pass over a photographer's shooting spot and says,
 in plain language, whether they'll be visible or hidden by cloud.
 
-Stack: Supabase (Postgres + PostGIS, Auth, auto REST API). Front end: TBD.
+Stack: Supabase (Postgres + PostGIS, Auth, auto REST API) and a SvelteKit 3 /
+Svelte 5 single-page app in `web/`.
 
 ## Layout
 
@@ -17,6 +18,11 @@ supabase/
   seed.sql           dev data (aircraft types, two Seattle airports)
   tests/             pgTAP tests (`supabase test db`)
 db-test/             run migrations + tests on plain local Postgres, no Docker
+web/                 SvelteKit app (static SPA, talks to Supabase directly)
+  src/lib/           supabase client, auth state, spot data layer, geo helpers
+  src/lib/components SpotMap (Leaflet), SpotForm
+  src/routes/        /login, / (spot list), /spots/new, /spots/[id]
+  tests/             Playwright end-to-end tests (Supabase mocked in the browser)
 ```
 
 ## Running
@@ -34,7 +40,23 @@ Without Docker (needs Postgres 16+, PostGIS 3, pgTAP installed locally):
 ./db-test/run.sh
 ```
 
-Deploy to a hosted project: `supabase link --project-ref <ref>` then `supabase db push`.
+Web app:
+
+```bash
+cd web
+cp .env.example .env.local   # fill in URL + anon key from `supabase status`
+npm install
+npm run dev                  # http://localhost:5173
+npm test                     # unit tests (vitest)
+npm run test:e2e             # Playwright, phone viewport, no backend needed
+npm run build                # static site in web/build (SPA fallback: 200.html)
+```
+
+The build is plain static files; any static host works if it serves
+`200.html` for unknown paths (Netlify does this automatically; for
+Vercel/Cloudflare Pages add a rewrite to `/200.html`).
+
+Deploy the database to a hosted project: `supabase link --project-ref <ref>` then `supabase db push`.
 
 ## Data model notes
 
@@ -71,7 +93,22 @@ Deploy to a hosted project: `supabase link --project-ref <ref>` then `supabase d
   written only by ingest workers using the `service_role` key.
 - `anon` has no table access.
 
+## Web app notes
+
+- Sign-in is email + password via Supabase Auth. If email confirmation is on
+  (the default on hosted projects), sign-up shows "check your email".
+- The spot form: tap the map, drag the pin, "Use my location", or type
+  `lat, lon`. Ground elevation is looked up from the Open-Meteo elevation API
+  (free, no key) and can be overridden for rooftops; a typed value is never
+  overwritten when the pin moves.
+- The map uses OpenStreetMap tiles by default. OSM's tile policy doesn't allow
+  heavy production use, so set `VITE_MAP_TILE_URL` to a provider (MapTiler,
+  Stadia, etc.) before launch.
+- `#lib/...` imports need the file extension (`#lib/geo.ts`): SvelteKit 3 uses
+  Node subpath imports instead of the old `$lib` alias.
+
 ## Status
 
-Phase 1, step 1 (schema + auth) done. Next: shooting-spot UI, then METAR ingest.
+Phase 1 steps 1 (schema + auth) and 2 (store a shooting spot) done.
+Next: step 3, METAR ingest.
 `taf_forecast` and `high_cloud_estimate` are deferred to phase 2.
