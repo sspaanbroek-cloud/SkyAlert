@@ -30,7 +30,7 @@ export interface SpotRow {
 	updated_at: string;
 }
 
-export async function mockBackend(page: Page, opts: { elevationM?: number | null; weather?: unknown[] } = {}) {
+export async function mockBackend(page: Page, opts: { elevationM?: number | null; weather?: unknown[]; passes?: unknown[] } = {}) {
 	const spots: SpotRow[] = [];
 	const writes: { method: string; body: unknown }[] = [];
 	let nextId = 1;
@@ -70,6 +70,12 @@ export async function mockBackend(page: Page, opts: { elevationM?: number | null
 		const { p_spot_id } = route.request().postDataJSON() as { p_spot_id: string };
 		writes.push({ method: 'RPC nearby_weather', body: p_spot_id });
 		return json(route, 200, opts.weather ?? []);
+	});
+
+	await page.route(`${SUPABASE}/rest/v1/overflight_prediction**`, async (route) => {
+		const url = new URL(route.request().url());
+		writes.push({ method: 'GET overflight_prediction', body: Object.fromEntries(url.searchParams) });
+		return json(route, 200, opts.passes ?? []);
 	});
 
 	await page.route(`${SUPABASE}/rest/v1/spot**`, async (route) => {

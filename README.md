@@ -17,10 +17,13 @@ supabase/
     …_auth_rls.sql     row-level security + grants
     …_metar_ingest.sql ingest_metars(), sky_summary(), nearby_weather()
     …_schedules.sql    pg_cron jobs (METAR every 10 min, purges)
+    …_adsb.sql         ingest_track_points(), compute_live_predictions(), ADS-B schedule
   functions/
     _shared/metar.ts   METAR parser (sky from raw text, numbers from AWC JSON)
     _shared/awc.ts     Aviation Weather Center client
+    _shared/opensky.ts OpenSky client (OAuth2 client credentials) + state-vector parser
     ingest-metar/      Edge Function: fetch around every spot, store
+    ingest-adsb/       Edge Function: poll OpenSky, store positions, predict passes
   seed.sql           dev data (aircraft types, two Seattle airports)
   tests/             pgTAP tests (`supabase test db`)
 db-test/             run migrations + tests on plain local Postgres, no Docker
@@ -156,6 +159,60 @@ Plain-language sky text (`sky_summary()`), examples:
 - `Scattered clouds at 3,500 ft above ground (thunderstorm clouds). Automated station: it can't see cloud above 12,000 ft`
 - `No cloud below 12,000 ft (automated sensor; it can't see higher)` (for `AUTO … CLR`)
 
+## Live ADS-B (OpenSky)
+
+`ingest-adsb` runs every minute from pg_cron. Each run:
+
+1. `adsb_fetch_areas()` returns one box per 1° grid cell holding spots,
+   padded by the largest search radius plus 80 nm of lookahead (about 8 to 10
+   minutes' warning for an airliner at cruise). Each box stays under 25 sq deg,
+   which OpenSky charges at 1 credit.
+2. `/states/all` is fetched per box. Positions are stored in `track_point`
+   (altitudes m to ft, speed m/s to kt, vertical rate to ft/min).
+3. `compute_live_predictions()` takes each aircraft's latest position (under
+   2 minutes old) and projects it in a straight line along its track for up
+   to 20 minutes. A pass is kept when the closest approach is ahead, within
+   the spot's search radius, and at least the spot's minimum elevation angle.
+   - Altitude: GNSS altitude when reported, else barometric. Vertical rate is
+     extrapolated for at most 5 minutes.
+   - Elevation angle includes Earth curvature with standard refraction.
+   - Confidence (0 to 1) falls with lookahead time, report age and climbing
+     or descending.
+   - The same pass is updated each minute, not duplicated. A future pass the
+     aircraft no longer heads for is removed, but not while the aircraft is
+     inside the radius within 2 minutes of its closest approach.
+   - Past passes are kept 2 days; track points 2 hours.
+
+Straight-line projection doesn't know about turns, so treat passes more than
+a few minutes out as "likely", which is what the confidence label shows.
+OpenSky state vectors carry no aircraft type, so `aircraft_type` stays empty
+for live passes.
+
+**Credit budget.** OpenSky gives a free account about 4,000 credits a day
+(anonymous about 400). One area polled every minute uses about 1,440 a day,
+so a free account covers two areas (spots in two different 1° cells) at
+this rate. For more areas, or anonymous use, slow the schedule:
+
+```sql
+select cron.alter_job((select jobid from cron.job where jobname = 'ingest-adsb'), schedule := '*/3 * * * *');
+```
+
+The function's JSON response reports `credits_used`, `credits_remaining`
+and whether OpenSky rate-limited the run.
+
+Setup: create an API client in your OpenSky account (Account page, API
+client), then:
+
+```bash
+supabase functions deploy ingest-adsb
+```
+
+```bash
+supabase secrets set OPENSKY_CLIENT_ID=... OPENSKY_CLIENT_SECRET=...
+```
+
+It uses the same `INGEST_SECRET` and Vault secrets as the METAR job.
+
 ## Web app notes
 
 - Sign-in is email + password via Supabase Auth. If email confirmation is on
@@ -171,11 +228,16 @@ Plain-language sky text (`sky_summary()`), examples:
   nearest stations (`nearby_weather()`), with distance and direction, the
   plain-language summary, report age (flagged when over 90 minutes), and the
   raw METAR.
+- Each spot's page also shows "Coming overhead": predicted passes from 2
+  minutes ago onwards, with time, altitude, distance, where to look (compass
+  direction and angle above the horizon) and confidence. It refreshes every
+  30 seconds while the page is visible.
 - `#lib/...` imports need the file extension (`#lib/geo.ts`): SvelteKit 3 uses
   Node subpath imports instead of the old `$lib` alias.
 
 ## Status
 
-Phase 1 steps 1 (schema + auth), 2 (store a shooting spot) and 3 (METAR
-ingest) done. Next: step 4, live ADS-B ingest and approach detection.
+Phase 1 steps 1 to 4 done (schema + auth, shooting spots, METAR ingest, live
+ADS-B predictions). Next: step 5, the clear / partial / hidden visibility
+rating per pass.
 `taf_forecast` and `high_cloud_estimate` are deferred to phase 2.

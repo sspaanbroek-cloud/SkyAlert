@@ -1,6 +1,7 @@
 <script lang="ts">
 	import SpotForm from '#lib/components/SpotForm.svelte';
 	import NearbyWeather from '#lib/components/NearbyWeather.svelte';
+	import UpcomingPasses from '#lib/components/UpcomingPasses.svelte';
 	import { deleteSpot, describeError, getSpot, updateSpot, type Spot, type SpotInput } from '#lib/spots.ts';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
@@ -48,6 +49,8 @@
 	<p><a href="/">Back to your spots</a></p>
 {:else}
 	<h1>{spot.name}</h1>
+	<UpcomingPasses spotId={spot.id} />
+	<div style="height:12px"></div>
 	<NearbyWeather spotId={spot.id} />
 	<h2 style="font-size:1.125rem;margin:24px 0 0">Edit spot</h2>
 	{#key spot.id}

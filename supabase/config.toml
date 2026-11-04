@@ -426,3 +426,8 @@ enabled = true
 [functions.ingest-metar]
 enabled = true
 verify_jwt = false
+
+# Live ADS-B ingest: called by pg_cron every minute, same auth as ingest-metar.
+[functions.ingest-adsb]
+enabled = true
+verify_jwt = false

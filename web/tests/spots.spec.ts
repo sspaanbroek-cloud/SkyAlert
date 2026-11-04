@@ -125,3 +125,39 @@ test('spot page shows plain-language sky from nearby stations', async ({ page })
 	expect(backend.writes.find((w) => w.method === 'RPC nearby_weather')?.body).toBe(backend.spots[0].id);
 	await page.screenshot({ path: 'test-results/spot-weather.png', fullPage: true });
 });
+
+test('spot page lists upcoming passes with where to look', async ({ page }) => {
+	const soon = (min: number) => new Date(Date.now() + min * 60_000).toISOString();
+	const backend = await mockBackend(page, {
+		passes: [
+			{ id: 1, basis: 'live_adsb', callsign: 'ASA123', icao24: 'a1b2c3', aircraft_type: null,
+			  closest_approach_at: soon(0.3), closest_distance_nm: 0.4, altitude_ft: 10000, azimuth_deg: 12,
+			  elevation_deg: 84, confidence: 0.92, computed_at: soon(0) },
+			{ id: 2, basis: 'live_adsb', callsign: null, icao24: 'c0ffee', aircraft_type: null,
+			  closest_approach_at: soon(6.2), closest_distance_nm: 4.95, altitude_ft: 35000, azimuth_deg: 90,
+			  elevation_deg: 48.8, confidence: 0.62, computed_at: soon(0) }
+		]
+	});
+	await signIn(page);
+	await page.getByRole('link', { name: 'Add spot' }).click();
+	await page.getByLabel('Name').fill('Kubota Garden hill');
+	await page.getByPlaceholder('latitude, longitude').fill('47.5134, -122.2712');
+	await page.getByRole('button', { name: 'Go' }).click();
+	await expect(page.getByLabel('Ground elevation (ft above sea level)')).toHaveValue('200');
+	await page.getByRole('button', { name: 'Save spot' }).click();
+	await page.getByText('Kubota Garden hill').click();
+
+	const list = page.getByRole('region', { name: 'Coming overhead' });
+	await expect(list.getByText('ASA123')).toBeVisible();
+	await expect(list.getByText('Passing now')).toBeVisible();
+	await expect(list.getByText('Straight overhead')).toBeVisible();
+	await expect(list.getByText('C0FFEE')).toBeVisible();
+	await expect(list.getByText('in 6 min')).toBeVisible();
+	await expect(list.getByText('35,000 ft, passes 5.0 nm away')).toBeVisible();
+	await expect(list.getByText('Look E (90°), 49° above the horizon')).toBeVisible();
+	await expect(list.getByText('Live tracking · Medium confidence')).toBeVisible();
+	const q = backend.writes.find((w) => w.method === 'GET overflight_prediction')!.body as Record<string, string>;
+	expect(q.spot_id).toBe(`eq.${backend.spots[0].id}`);
+	expect(q.order).toBe('closest_approach_at.asc');
+	await page.getByRole('region', { name: 'Coming overhead' }).screenshot({ path: 'test-results/passes.png' });
+});
