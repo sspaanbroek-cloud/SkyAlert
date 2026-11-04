@@ -25,6 +25,9 @@
 	let radiusNm = $state(seed.search_radius_nm ?? SPOT_DEFAULTS.search_radius_nm);
 	let minElevationDeg = $state(seed.min_elevation_deg ?? SPOT_DEFAULTS.min_elevation_deg);
 	let timeZone = $state(seed.time_zone ?? browserTimeZone());
+	let alertsEnabled = $state(seed.alerts_enabled ?? SPOT_DEFAULTS.alerts_enabled);
+	let alertsMinRating: 'clear' | 'partial' = $state(seed.alerts_min_rating ?? SPOT_DEFAULTS.alerts_min_rating);
+	let alertsLeadMin = $state(seed.alerts_lead_min ?? SPOT_DEFAULTS.alerts_lead_min);
 	const zones = timeZoneOptions(seed.time_zone ?? browserTimeZone());
 	let coordText = $state(
 		seed.lat != null && seed.lon != null ? `${seed.lat.toFixed(5)}, ${seed.lon.toFixed(5)}` : ''
@@ -113,7 +116,10 @@
 				elevation_ft: elevationFt,
 				search_radius_nm: radiusNm,
 				min_elevation_deg: minElevationDeg,
-				time_zone: timeZone
+				time_zone: timeZone,
+				alerts_enabled: alertsEnabled,
+				alerts_min_rating: alertsMinRating,
+				alerts_lead_min: alertsLeadMin
 			});
 		} catch (err) {
 			error = (err as Error).message;
@@ -190,6 +196,24 @@
 	</select>
 	<p class="hint">Pass times and "usual" flight times for this spot are shown in this zone.</p>
 
+	<fieldset class="alerts">
+		<legend>Alerts</legend>
+		<label class="check"><input type="checkbox" bind:checked={alertsEnabled} /> Alert me before good passes</label>
+		{#if alertsEnabled}
+			<label for="minrating">Which passes</label>
+			<select id="minrating" bind:value={alertsMinRating}>
+				<option value="clear">Clear view only</option>
+				<option value="partial">Clear or partly visible</option>
+			</select>
+			<label for="lead">Minutes ahead</label>
+			<input id="lead" type="number" inputmode="numeric" min="1" max="120" step="1" bind:value={alertsLeadMin} />
+			<p class="hint">
+				For live-tracked aircraft. Most are spotted 5 to 15 minutes out, so you'll often get the alert as soon as one is
+				found. Turn on notifications on the home page for each device.
+			</p>
+		{/if}
+	</fieldset>
+
 	{#if error}<p class="msg error" role="alert">{error}</p>{/if}
 
 	<div class="row" style="margin-top:20px">
@@ -199,6 +223,28 @@
 </form>
 
 <style>
+	.alerts {
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+		padding: 4px 12px 12px;
+		margin: 20px 0 0;
+	}
+	.alerts legend {
+		font-weight: 600;
+		padding: 0 4px;
+	}
+	.check {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		font-weight: 400;
+		margin-top: 8px;
+	}
+	.check input {
+		width: 20px;
+		height: 20px;
+		accent-color: var(--accent);
+	}
 	.coords {
 		margin-top: 8px;
 		flex-wrap: nowrap;

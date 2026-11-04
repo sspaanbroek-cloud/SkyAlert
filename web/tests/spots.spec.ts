@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { mockBackend } from './mock-supabase';
+import { fakePushService, mockBackend } from './mock-supabase';
 
 async function signIn(page: import('@playwright/test').Page) {
 	await page.goto('/');
@@ -45,7 +45,10 @@ test('create, edit and delete a spot', async ({ page }) => {
 		elevation_ft: 200,
 		search_radius_nm: 10,
 		min_elevation_deg: 20,
-		time_zone: 'America/Los_Angeles' // from the browser (see playwright.config.ts)
+		time_zone: 'America/Los_Angeles', // from the browser (see playwright.config.ts)
+		alerts_enabled: false,
+		alerts_min_rating: 'clear',
+		alerts_lead_min: 10
 	});
 	await page.screenshot({ path: 'test-results/list.png', fullPage: true });
 
@@ -203,4 +206,107 @@ test('regular flights and usual-flight passes', async ({ page }) => {
 	const passes = page.getByRole('region', { name: 'Coming overhead' });
 	await expect(passes.getByText(/^ASA123, 33,000 ft, passes (tomorrow|\w{3}) at /)).toBeVisible();
 	await expect(passes.getByText('Usual flight · Medium confidence')).toBeVisible();
+});
+
+test('notifications: turn on, alert settings, remind me', async ({ page, context }) => {
+	await context.grantPermissions(['notifications']);
+	await fakePushService(page);
+	const passAt = new Date(Date.now() + 3 * 3600_000).toISOString();
+	const backend = await mockBackend(page, {
+		passes: [
+			{ id: 9, basis: 'recurring', callsign: 'ASA123', icao24: null, aircraft_type: null,
+			  closest_approach_at: passAt, closest_distance_nm: 1.5, altitude_ft: 33000, azimuth_deg: 40,
+			  elevation_deg: 70, confidence: 0.7, computed_at: new Date().toISOString(), visibility_assessment: null }
+		]
+	});
+	await signIn(page);
+
+	const card = page.getByRole('region', { name: 'Notifications on this device' });
+	await card.getByRole('button', { name: 'Turn on notifications' }).click();
+	await expect(card.getByRole('button', { name: 'Turn off on this device' })).toBeVisible();
+	expect(backend.writes.find((w) => w.method === 'RPC save_push_subscription')?.body).toMatchObject({
+		p_endpoint: 'https://push.example/test-device', p_p256dh: 'test-p256dh', p_auth: 'test-auth'
+	});
+
+	// Spot with alerts on: partly visible too, 15 minutes ahead.
+	await page.getByRole('link', { name: 'Add spot' }).click();
+	await page.getByLabel('Name').fill('Kubota Garden hill');
+	await page.getByPlaceholder('latitude, longitude').fill('47.5134, -122.2712');
+	await page.getByRole('button', { name: 'Go' }).click();
+	await expect(page.getByLabel('Ground elevation (ft above sea level)')).toHaveValue('200');
+	await page.getByLabel('Alert me before good passes').check();
+	await page.getByLabel('Which passes').selectOption('partial');
+	await page.getByLabel('Minutes ahead').fill('15');
+	await page.getByRole('button', { name: 'Save spot' }).click();
+	await expect(page.getByText('Alerts on: clear or partly visible, 15 min ahead')).toBeVisible();
+	expect(backend.writes.find((w) => w.method === 'POST')?.body).toMatchObject({
+		alerts_enabled: true, alerts_min_rating: 'partial', alerts_lead_min: 15
+	});
+
+	// Remind me on a usual-flight pass: 15 min before.
+	await page.getByText('Kubota Garden hill').click();
+	const passes = page.getByRole('region', { name: 'Coming overhead' });
+	await passes.getByRole('button', { name: 'Remind me' }).click();
+	await expect(passes.getByRole('button', { name: 'Reminder set · cancel' })).toBeVisible();
+	const reminder = backend.writes.find((w) => w.method === 'POST alert')!.body as Record<string, unknown>;
+	expect(reminder).toMatchObject({ prediction_id: 9, manual: true, spot_id: backend.spots[0].id });
+	expect(Math.abs(new Date(reminder.notify_at as string).getTime() - (new Date(passAt).getTime() - 15 * 60_000))).toBeLessThan(2000);
+	await passes.getByRole('button', { name: 'Reminder set · cancel' }).click();
+	await expect(passes.getByRole('button', { name: 'Remind me' })).toBeVisible();
+
+	// Service worker is actually registered by the app.
+	expect(await page.evaluate(async () => (await navigator.serviceWorker.getRegistration())?.active?.scriptURL)).toMatch(/service-worker\.js$/);
+});
+
+test('remind me is disabled until notifications are on', async ({ page }) => {
+	await mockBackend(page, {
+		passes: [
+			{ id: 9, basis: 'recurring', callsign: 'ASA123', icao24: null, aircraft_type: null,
+			  closest_approach_at: new Date(Date.now() + 3 * 3600_000).toISOString(), closest_distance_nm: 1.5,
+			  altitude_ft: 33000, azimuth_deg: 40, elevation_deg: 70, confidence: 0.7,
+			  computed_at: new Date().toISOString(), visibility_assessment: null }
+		]
+	});
+	await signIn(page);
+	await page.getByRole('link', { name: 'Add spot' }).click();
+	await page.getByLabel('Name').fill('X');
+	await page.getByPlaceholder('latitude, longitude').fill('47.5134, -122.2712');
+	await page.getByRole('button', { name: 'Go' }).click();
+	await expect(page.getByLabel('Ground elevation (ft above sea level)')).toHaveValue('200');
+	await page.getByRole('button', { name: 'Save spot' }).click();
+	await page.getByText('X', { exact: true }).click();
+	const passes = page.getByRole('region', { name: 'Coming overhead' });
+	await expect(passes.getByRole('button', { name: 'Remind me' })).toBeDisabled();
+	await expect(passes.getByText('Turn on notifications on the home page to use reminders.')).toBeVisible();
+});
+
+test('service worker shows a delivered push as a notification', async ({ page, context }) => {
+	await context.grantPermissions(['notifications']);
+	await mockBackend(page);
+	await signIn(page);
+	await page.evaluate(() => navigator.serviceWorker.ready);
+
+	// Deliver a push straight to the registered worker via Chrome DevTools Protocol.
+	const cdp = await context.newCDPSession(page);
+	const registrationId = new Promise<string>((resolve) => {
+		cdp.on('ServiceWorker.workerRegistrationUpdated', (e) => {
+			const r = e.registrations.find((x) => x.scopeURL.startsWith('http://localhost:4173'));
+			if (r) resolve(r.registrationId);
+		});
+	});
+	await cdp.send('ServiceWorker.enable');
+	await cdp.send('ServiceWorker.deliverPushMessage', {
+		origin: 'http://localhost:4173',
+		registrationId: await registrationId,
+		data: JSON.stringify({ title: 'ASA123 overhead in 6 min', body: 'Clear view · 33,000 ft', tag: 'pass-42', url: '/spots/abc' })
+	});
+
+	await expect
+		.poll(async () =>
+			page.evaluate(async () => {
+				const reg = await navigator.serviceWorker.ready;
+				return (await reg.getNotifications()).map((n) => `${n.title} | ${n.body} | ${n.tag} | ${n.data?.url}`);
+			})
+		)
+		.toEqual(['ASA123 overhead in 6 min | Clear view · 33,000 ft | pass-42 | /spots/abc']);
 });

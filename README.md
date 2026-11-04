@@ -22,6 +22,7 @@ supabase/
     …_recurring.sql    sightings, recurring-flight detection, 'recurring' predictions
     …_taf.sql          TAF storage, rate_conditions(), rate_taf(), forecast-aware assess_visibility()
     …_model_cloud.sql  high_cloud_estimate, apply_model_cloud(), model-cloud schedule
+    …_alerts.sql       push_subscription, spot alert settings, queue/claim/complete alerts
   functions/
     _shared/metar.ts   METAR parser (sky from raw text, numbers from AWC JSON)
     _shared/awc.ts     Aviation Weather Center client
@@ -30,7 +31,9 @@ supabase/
     ingest-metar/      Edge Function: fetch around every spot, store
     _shared/openmeteo.ts Open-Meteo client (hourly low/mid/high cloud cover)
     ingest-adsb/       Edge Function: poll OpenSky, store positions, predict passes
+    _shared/notify.ts  notification wording
     ingest-model-cloud/ Edge Function: model cloud per spot cell, re-rate passes
+    send-alerts/       Edge Function: queue, claim and deliver alerts by Web Push
   seed.sql           dev data (aircraft types, two Seattle airports)
   tests/             pgTAP tests (`supabase test db`)
 db-test/             run migrations + tests on plain local Postgres, no Docker
@@ -334,6 +337,48 @@ supabase secrets set OPEN_METEO_API_KEY=...
 Requests then go to `customer-api.open-meteo.com`. Deploy with
 `supabase functions deploy ingest-model-cloud`.
 
+## Push alerts (Web Push)
+
+- Each device turns notifications on from the home page; its subscription is
+  saved with `save_push_subscription()` (a shared browser belongs to whoever
+  subscribed on it last).
+- Spots have alert settings: on/off, which ratings ("clear view only" or
+  "clear or partly visible") and minutes ahead (default 10).
+- `send-alerts` runs every minute:
+  1. `queue_alerts()` queues an automatic alert for each live (or, later,
+     filed-plan) pass in the next hour that meets the spot's rating with
+     confidence of at least 0.5. Usual-flight passes are never alerted
+     automatically: they aren't confirmed.
+  2. `claim_due_alerts()` re-checks each due automatic alert and skips it if
+     the pass is over or the rating has dropped; manual reminders always go.
+  3. Each claimed alert goes to every device the user subscribed. Endpoints
+     the push service reports gone (404/410) are deleted; 10 failures in a
+     row also remove a subscription.
+- "Remind me" on any pass (including usual flights hours ahead) sets a manual
+  reminder at the spot's lead time. When live tracking takes over a usual
+  flight, its reminders move to the live pass, keeping the same lead time.
+- Notification text, for example: **ASA123 overhead in 6 min** /
+  "Clear view · 33,000 ft · look NE, 62° up · at 7:42 pm" / "Kubota Garden".
+  Tapping it opens that spot.
+- iPhone/iPad: web push works only after "Add to Home Screen" (iOS 16.4+);
+  the app says so. The manifest and icons for that are in `web/static`.
+
+Setup:
+
+```bash
+npx web-push generate-vapid-keys
+```
+
+```bash
+supabase secrets set VAPID_PUBLIC_KEY=... VAPID_PRIVATE_KEY=... VAPID_SUBJECT=mailto:you@example.com
+```
+
+```bash
+supabase functions deploy send-alerts
+```
+
+Put the same public key in `web/.env.local` as `VITE_VAPID_PUBLIC_KEY`.
+
 ## Web app notes
 
 - Sign-in is email + password via Supabase Auth. If email confirmation is on
@@ -368,6 +413,6 @@ Phase 1 done: schema + auth, shooting spots, METAR ingest, live ADS-B
 predictions, and the clear / partial / hidden rating per pass.
 
 Phase 2, in order: recurring flights (done), TAF forecasts (done), high cloud from
-Open-Meteo (done), web push alerts, then NASR route resolution and filed flight
+Open-Meteo (done), web push alerts (done), then NASR route resolution and filed flight
 plans (source to be chosen: FAA SWIM or FlightAware AeroAPI).
 `taf_forecast` and `high_cloud_estimate` are deferred to phase 2.

@@ -436,3 +436,8 @@ verify_jwt = false
 [functions.ingest-model-cloud]
 enabled = true
 verify_jwt = false
+
+# Web push delivery: called by pg_cron every minute, same auth as the others.
+[functions.send-alerts]
+enabled = true
+verify_jwt = false

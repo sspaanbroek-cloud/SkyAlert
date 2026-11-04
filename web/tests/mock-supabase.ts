@@ -34,6 +34,7 @@ export interface SpotRow {
 export async function mockBackend(page: Page, opts: { elevationM?: number | null; weather?: unknown[]; passes?: unknown[]; regulars?: unknown[] } = {}) {
 	const spots: SpotRow[] = [];
 	const writes: { method: string; body: unknown }[] = [];
+	const alerts: { prediction_id: number; manual: boolean; notify_at: string; spot_id: string }[] = [];
 	let nextId = 1;
 
 	const user = { id: USER_ID, email: 'pilot@example.com', aud: 'authenticated', role: 'authenticated' };
@@ -71,6 +72,31 @@ export async function mockBackend(page: Page, opts: { elevationM?: number | null
 		const { p_spot_id } = route.request().postDataJSON() as { p_spot_id: string };
 		writes.push({ method: 'RPC nearby_weather', body: p_spot_id });
 		return json(route, 200, opts.weather ?? []);
+	});
+
+	await page.route(`${SUPABASE}/rest/v1/rpc/*_push_subscription`, async (route) => {
+		const name = new URL(route.request().url()).pathname.split('/').pop()!;
+		writes.push({ method: `RPC ${name}`, body: route.request().postDataJSON() });
+		return route.fulfill({ status: 204 });
+	});
+
+	await page.route(`${SUPABASE}/rest/v1/alert**`, async (route) => {
+		const req = route.request();
+		const url = new URL(req.url());
+		if (req.method() === 'GET') return json(route, 200, alerts);
+		if (req.method() === 'POST') {
+			const body = req.postDataJSON();
+			writes.push({ method: 'POST alert', body });
+			alerts.push(body);
+			return route.fulfill({ status: 201 });
+		}
+		if (req.method() === 'DELETE') {
+			const pid = Number(url.searchParams.get('prediction_id')?.replace('eq.', ''));
+			writes.push({ method: 'DELETE alert', body: pid });
+			alerts.splice(0, alerts.length, ...alerts.filter((a) => a.prediction_id !== pid));
+			return route.fulfill({ status: 204 });
+		}
+		return json(route, 405, {});
 	});
 
 	await page.route(`${SUPABASE}/rest/v1/recurring_flight**`, (route) => json(route, 200, opts.regulars ?? []));
@@ -131,5 +157,33 @@ export async function mockBackend(page: Page, opts: { elevationM?: number | null
 		return json(route, 405, {});
 	});
 
-	return { spots, writes };
+	return { spots, writes, alerts };
+}
+
+/**
+ * Headless Chromium can't reach a real push service, so replace only the
+ * PushManager subscribe/getSubscription calls with a fake subscription.
+ * Everything else (service worker registration, permission) is real.
+ */
+export async function fakePushService(page: Page) {
+	await page.addInitScript(() => {
+		let current: unknown = null;
+		const fake = {
+			endpoint: 'https://push.example/test-device',
+			toJSON: () => ({ endpoint: 'https://push.example/test-device', keys: { p256dh: 'test-p256dh', auth: 'test-auth' } }),
+			unsubscribe: async () => {
+				current = null;
+				return true;
+			}
+		};
+		if ('PushManager' in window) {
+			PushManager.prototype.subscribe = async function () {
+				current = fake;
+				return fake as unknown as PushSubscription;
+			};
+			PushManager.prototype.getSubscription = async function () {
+				return current as PushSubscription | null;
+			};
+		}
+	});
 }

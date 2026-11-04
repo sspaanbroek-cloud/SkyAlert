@@ -50,7 +50,7 @@
 	<p><a href="/">Back to your spots</a></p>
 {:else}
 	<h1>{spot.name}</h1>
-	<UpcomingPasses spotId={spot.id} timeZone={spot.time_zone} />
+	<UpcomingPasses spotId={spot.id} timeZone={spot.time_zone} leadMin={spot.alerts_lead_min} />
 	<div style="height:12px"></div>
 	<NearbyWeather spotId={spot.id} />
 	<div style="height:12px"></div>

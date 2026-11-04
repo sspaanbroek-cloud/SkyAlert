@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { describeError, listSpots, type Spot } from '#lib/spots.ts';
 	import { formatFt, formatLatLon } from '#lib/geo.ts';
+	import NotificationSettings from '#lib/components/NotificationSettings.svelte';
 
 	let spots: Spot[] | null = $state(null);
 	let error = $state('');
@@ -34,11 +35,15 @@
 					<strong>{s.name}</strong>
 					<span class="hint">{formatLatLon(s)} · {formatFt(s.elevation_ft)}</span>
 					<span class="hint">Within {s.search_radius_nm} nm, at least {s.min_elevation_deg}° above the horizon</span>
+					{#if s.alerts_enabled}<span class="hint">Alerts on: {s.alerts_min_rating === 'clear' ? 'clear views' : 'clear or partly visible'}, {s.alerts_lead_min} min ahead</span>{/if}
 				</a>
 			</li>
 		{/each}
 	</ul>
 {/if}
+
+<div style="height:16px"></div>
+<NotificationSettings />
 
 <style>
 	.spots {

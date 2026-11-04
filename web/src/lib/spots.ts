@@ -10,6 +10,9 @@ export interface Spot {
 	search_radius_nm: number;
 	min_elevation_deg: number;
 	time_zone: string;
+	alerts_enabled: boolean;
+	alerts_min_rating: 'clear' | 'partial';
+	alerts_lead_min: number;
 	updated_at: string;
 }
 
@@ -19,11 +22,20 @@ export interface SpotInput extends LatLon {
 	search_radius_nm: number;
 	min_elevation_deg: number;
 	time_zone: string;
+	alerts_enabled: boolean;
+	alerts_min_rating: 'clear' | 'partial';
+	alerts_lead_min: number;
 }
 
-export const SPOT_DEFAULTS = { search_radius_nm: 10, min_elevation_deg: 20 } as const;
+export const SPOT_DEFAULTS = {
+	search_radius_nm: 10,
+	min_elevation_deg: 20,
+	alerts_enabled: false,
+	alerts_min_rating: 'clear',
+	alerts_lead_min: 10
+} as const;
 
-const COLUMNS = 'id, name, lat, lon, elevation_ft, search_radius_nm, min_elevation_deg, time_zone, updated_at';
+const COLUMNS = 'id, name, lat, lon, elevation_ft, search_radius_nm, min_elevation_deg, time_zone, alerts_enabled, alerts_min_rating, alerts_lead_min, updated_at';
 
 // numeric columns come back as numbers from PostgREST, but be defensive.
 function normalize(row: Record<string, unknown>): Spot {
@@ -33,7 +45,8 @@ function normalize(row: Record<string, unknown>): Spot {
 		lon: Number(row.lon),
 		elevation_ft: Number(row.elevation_ft),
 		search_radius_nm: Number(row.search_radius_nm),
-		min_elevation_deg: Number(row.min_elevation_deg)
+		min_elevation_deg: Number(row.min_elevation_deg),
+		alerts_lead_min: Number(row.alerts_lead_min)
 	};
 }
 
@@ -44,7 +57,10 @@ function toRow(input: SpotInput) {
 		elevation_ft: Math.round(input.elevation_ft),
 		search_radius_nm: input.search_radius_nm,
 		min_elevation_deg: input.min_elevation_deg,
-		time_zone: input.time_zone
+		time_zone: input.time_zone,
+		alerts_enabled: input.alerts_enabled,
+		alerts_min_rating: input.alerts_min_rating,
+		alerts_lead_min: Math.round(input.alerts_lead_min)
 	};
 }
 
@@ -87,7 +103,7 @@ export function describeError(e: unknown): string {
 	const err = e as { code?: string; message?: string };
 	switch (err?.code) {
 		case '23514':
-			return 'One of the values is out of range. Check the radius (up to 100 nm) and elevation angle (0 to 90°).';
+			return 'One of the values is out of range. Check the radius (up to 100 nm), elevation angle (0 to 90°) and alert lead time (1 to 120 min).';
 		case '22023':
 			return 'That time zone is not recognised.';
 		case '42501':

@@ -11,7 +11,12 @@
 		type Pass
 	} from '#lib/passes.ts';
 
-	let { spotId, timeZone }: { spotId: string; timeZone?: string } = $props();
+	import { cancelReminder, pendingAlerts, remindMe } from '#lib/alerts.ts';
+	import { notificationsGranted } from '#lib/push.ts';
+
+	let { spotId, timeZone, leadMin = 10 }: { spotId: string; timeZone?: string; leadMin?: number } = $props();
+	let alerts: Map<number, { manual: boolean; notify_at: string }> = $state(new Map());
+	let canNotify = $state(false);
 
 	const REFRESH_MS = 30_000;
 	let passes: Pass[] | null = $state(null);
@@ -20,8 +25,19 @@
 
 	async function load() {
 		try {
-			passes = await listUpcomingPasses(spotId);
+			[passes, alerts] = await Promise.all([listUpcomingPasses(spotId), pendingAlerts(spotId)]);
+			canNotify = notificationsGranted();
 			error = '';
+		} catch (e) {
+			error = (e as Error).message;
+		}
+	}
+
+	async function toggleReminder(p: Pass) {
+		try {
+			if (alerts.has(p.id)) await cancelReminder(spotId, p.id);
+			else await remindMe(spotId, p.id, p.closest_approach_at, leadMin);
+			alerts = await pendingAlerts(spotId);
 		} catch (e) {
 			error = (e as Error).message;
 		}
@@ -72,6 +88,19 @@
 						<p class="detail hint">Checking the weather for this pass…</p>
 					{/if}
 					<p class="detail">{[look, `${p.closest_distance_nm.toFixed(1)} nm from you`].filter(Boolean).join(', ')}</p>
+					{#if when !== 'Just passed' && when !== 'Passing now'}
+						<div class="remind">
+							{#if alerts.has(p.id)}
+								<button class="small" onclick={() => toggleReminder(p)} aria-pressed="true">
+									{alerts.get(p.id)?.manual ? 'Reminder set' : 'Alert queued'} · cancel
+								</button>
+							{:else}
+								<button class="small" onclick={() => toggleReminder(p)} disabled={!canNotify}
+									title={canNotify ? '' : 'Turn on notifications on the home page first'}>Remind me</button>
+								{#if !canNotify}<span class="hint">Turn on notifications on the home page to use reminders.</span>{/if}
+							{/if}
+						</div>
+					{/if}
 					<p class="hint">
 						{BASIS_LABEL[p.basis]}{#if conf}&ensp;·&ensp;{conf} confidence{/if}{#if a && weatherSource(a)}&ensp;·&ensp;{weatherSource(a)}{/if}
 					</p>
@@ -138,6 +167,21 @@
 	}
 	.detail {
 		margin: 2px 0 0;
+	}
+	.remind {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		flex-wrap: wrap;
+		margin-top: 6px;
+	}
+	.remind .hint {
+		margin: 0;
+	}
+	button.small {
+		min-height: 36px;
+		padding: 6px 12px;
+		font-size: 0.875rem;
 	}
 	li .hint {
 		margin: 2px 0 0;
