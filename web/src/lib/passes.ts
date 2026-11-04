@@ -10,6 +10,7 @@ export interface Assessment {
 	metar_station: string | null;
 	obs_age_min: number | null;
 	stations_used: string[];
+	weather_basis: 'metar' | 'taf' | 'metar_persistence' | 'none';
 	computed_at: string;
 }
 
@@ -31,7 +32,7 @@ export interface Pass {
 
 const COLUMNS =
 	'id, basis, callsign, icao24, aircraft_type, closest_approach_at, closest_distance_nm, altitude_ft, azimuth_deg, elevation_deg, confidence, computed_at, ' +
-	'visibility_assessment(rating, explanation, high_cloud_caveat, metar_station, obs_age_min, stations_used, computed_at)';
+	'visibility_assessment(rating, explanation, high_cloud_caveat, metar_station, obs_age_min, stations_used, weather_basis, computed_at)';
 
 /** Passes from 2 minutes ago onwards, soonest first. RLS limits this to your own spots. */
 export async function listUpcomingPasses(spotId: string, now = new Date()): Promise<Pass[]> {
@@ -126,8 +127,13 @@ export const BASIS_LABEL: Record<Pass['basis'], string> = {
 	filed_plan: 'Filed flight plan'
 };
 
-export function weatherSource(a: Pick<Assessment, 'metar_station' | 'obs_age_min'>): string | null {
+export function weatherSource(a: Pick<Assessment, 'metar_station' | 'obs_age_min' | 'weather_basis'>): string | null {
 	if (!a.metar_station) return null;
-	const age = a.obs_age_min == null ? '' : a.obs_age_min < 1 ? ', just now' : `, ${a.obs_age_min} min old`;
-	return `Weather from ${a.metar_station}${age}`;
+	const mins = a.obs_age_min;
+	if (a.weather_basis === 'taf') {
+		const issued = mins == null ? '' : mins < 90 ? `, issued ${mins} min ago` : `, issued ${Math.round(mins / 60)} h ago`;
+		return `Forecast from ${a.metar_station}${issued}`;
+	}
+	const age = mins == null ? '' : mins < 1 ? ', just now' : `, ${mins} min old`;
+	return `${a.weather_basis === 'metar_persistence' ? 'Current weather' : 'Weather'} from ${a.metar_station}${age}`;
 }

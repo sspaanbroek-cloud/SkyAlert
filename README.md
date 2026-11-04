@@ -20,9 +20,11 @@ supabase/
     …_adsb.sql         ingest_track_points(), compute_live_predictions(), ADS-B schedule
     …_visibility.sql   rate_sky(), assess_visibility(), refresh_visibility_assessments()
     …_recurring.sql    sightings, recurring-flight detection, 'recurring' predictions
+    …_taf.sql          TAF storage, rate_conditions(), rate_taf(), forecast-aware assess_visibility()
   functions/
     _shared/metar.ts   METAR parser (sky from raw text, numbers from AWC JSON)
     _shared/awc.ts     Aviation Weather Center client
+    _shared/taf.ts     TAF parser (AWC JSON change groups)
     _shared/opensky.ts OpenSky client (OAuth2 client credentials) + state-vector parser
     ingest-metar/      Edge Function: fetch around every spot, store
     ingest-adsb/       Edge Function: poll OpenSky, store positions, predict passes
@@ -279,8 +281,25 @@ for the next 36 hours (flights seen in the last 14 days only), using the
 flight's typical time, altitude, direction and distance. Confidence grows with
 the number of days seen and a tighter time spread, capped at 0.8. When live
 tracking picks the same callsign up within 45 minutes, the live pass replaces
-the usual one. These passes get visibility ratings like any other; until TAF
-support lands they use the latest METAR.
+the usual one. These passes get visibility ratings like any other, from the
+TAF when they're more than an hour out (below).
+
+## TAF forecasts
+
+`ingest-metar` also fetches current TAFs for the same areas and stores them
+with `ingest_tafs()` (`taf_forecast` + one `taf_period` per change group).
+A TAF failure never blocks the METAR ingest.
+
+For a pass more than 60 minutes out, `assess_visibility()` rates the TAFs
+valid at the pass time from up to 3 stations within 40 nm (same blending as
+METARs). `rate_taf()` builds the prevailing conditions at that time: BASE and
+FM groups reset everything, BECMG groups that have started change only what
+they mention. If a TEMPO or PROB group covering the pass is worse, a clear
+rating becomes partial and the explanation adds "At times, though: ...".
+Explanations start with "Forecast:". With no TAF in range, current METARs
+are used and the explanation says conditions may change
+(`weather_basis = 'metar_persistence'`). The cloud rules themselves live in
+one place, `rate_conditions()`, shared by METARs and TAFs.
 
 ## Web app notes
 
@@ -315,7 +334,7 @@ support lands they use the latest METAR.
 Phase 1 done: schema + auth, shooting spots, METAR ingest, live ADS-B
 predictions, and the clear / partial / hidden rating per pass.
 
-Phase 2, in order: recurring flights (done), TAF forecasts, high cloud from
+Phase 2, in order: recurring flights (done), TAF forecasts (done), high cloud from
 Open-Meteo, web push alerts, then NASR route resolution and filed flight
 plans (source to be chosen: FAA SWIM or FlightAware AeroAPI).
 `taf_forecast` and `high_cloud_estimate` are deferred to phase 2.

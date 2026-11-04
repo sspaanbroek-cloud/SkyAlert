@@ -3,6 +3,7 @@
 // 100 requests/minute; the ingest makes one request per area every 10 minutes.
 
 export const AWC_METAR_URL = 'https://aviationweather.gov/api/data/metar';
+export const AWC_TAF_URL = 'https://aviationweather.gov/api/data/taf';
 
 export interface Box {
 	min_lat: number;
@@ -22,16 +23,30 @@ export interface AwcOptions {
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
 
+const bboxParam = (box: Box) => [box.min_lat, box.min_lon, box.max_lat, box.max_lon].map(r2).join(',');
+
 export function metarUrl(box: Box, hours = 2): string {
-	const bbox = [box.min_lat, box.min_lon, box.max_lat, box.max_lon].map(r2).join(',');
-	return `${AWC_METAR_URL}?bbox=${bbox}&format=json&hours=${hours}`;
+	return `${AWC_METAR_URL}?bbox=${bboxParam(box)}&format=json&hours=${hours}`;
+}
+
+/** Current TAFs (latest issue per station) in a box. */
+export function tafUrl(box: Box): string {
+	return `${AWC_TAF_URL}?bbox=${bboxParam(box)}&format=json`;
 }
 
 /** Fetch raw AWC METAR objects in a box. Throws on HTTP or network errors. */
-export async function fetchMetarsInBox(box: Box, opts: AwcOptions): Promise<unknown[]> {
+export function fetchMetarsInBox(box: Box, opts: AwcOptions): Promise<unknown[]> {
+	return fetchAwcArray(metarUrl(box, opts.hours ?? 2), opts);
+}
+
+/** Fetch raw AWC TAF objects in a box. */
+export function fetchTafsInBox(box: Box, opts: AwcOptions): Promise<unknown[]> {
+	return fetchAwcArray(tafUrl(box), opts);
+}
+
+async function fetchAwcArray(url: string, opts: AwcOptions): Promise<unknown[]> {
 	const doFetch = opts.fetch ?? fetch;
 	const sleep = opts.sleep ?? ((ms: number) => new Promise((r) => setTimeout(r, ms)));
-	const url = metarUrl(box, opts.hours ?? 2);
 
 	for (let attempt = 0; attempt < 2; attempt++) {
 		const res = await doFetch(url, {

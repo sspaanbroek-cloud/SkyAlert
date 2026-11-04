@@ -1,6 +1,7 @@
 // Request handler for the ingest-metar function, with its dependencies passed
 // in so it can be tested without network or database.
-import { type Box, fetchMetarsInBox } from '../_shared/awc.ts';
+import { type Box, fetchMetarsInBox, fetchTafsInBox } from '../_shared/awc.ts';
+import { type TafRecord, parseAwcTaf } from '../_shared/taf.ts';
 import { type IngestRecord, parseAwcMetar } from '../_shared/metar.ts';
 
 export interface RpcResult<T> {
@@ -92,6 +93,28 @@ export function createHandler(deps: Deps) {
 			total.rejected.push(...res.data.rejected);
 		}
 
+		// TAFs for the same areas. Failures here never block the METAR result.
+		const tafErrors: string[] = [];
+		const tafs = new Map<string, TafRecord>();
+		let tafRejected = 0;
+		for (const box of boxes) {
+			try {
+				for (const item of await fetchTafsInBox(box, { fetch: deps.fetch, userAgent: deps.userAgent, sleep: deps.sleep })) {
+					const t = parseAwcTaf(item);
+					if (t.ok) tafs.set(`${t.record.station.icao}|${t.record.issued_at}`, t.record);
+					else tafRejected++;
+				}
+			} catch (e) {
+				tafErrors.push(`${JSON.stringify(box)}: ${(e as Error).message}`);
+			}
+		}
+		let tafResult: unknown = null;
+		if (tafs.size > 0) {
+			const res = await deps.rpc('ingest_tafs', { tafs: [...tafs.values()] });
+			if (res.error) tafErrors.push(`ingest_tafs: ${res.error.message}`);
+			else tafResult = res.data;
+		}
+
 		// New weather: re-rate passes that are coming up.
 		const vis = await deps.rpc<Record<string, number>>('refresh_visibility_assessments');
 		if (vis.error) return json(500, { error: `refresh_visibility_assessments: ${vis.error.message}`, ...total });
@@ -104,10 +127,11 @@ export function createHandler(deps: Deps) {
 			unchanged: total.unchanged,
 			parse_rejected: parseRejected,
 			db_rejected: total.rejected,
+			tafs: { parsed: tafs.size, parse_rejected: tafRejected, result: tafResult, errors: tafErrors },
 			visibility: vis.data,
 			fetch_errors: fetchErrors
 		};
-		if (parseRejected.length || total.rejected.length || fetchErrors.length) log('ingest-metar: partial', summary);
+		if (parseRejected.length || total.rejected.length || fetchErrors.length || tafErrors.length) log('ingest-metar: partial', summary);
 		return json(200, summary);
 	};
 }

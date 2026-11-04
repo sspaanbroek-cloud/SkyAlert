@@ -135,7 +135,7 @@ test('spot page lists upcoming passes with where to look', async ({ page }) => {
 			  closest_approach_at: soon(0.3), closest_distance_nm: 0.4, altitude_ft: 10000, azimuth_deg: 12,
 			  elevation_deg: 84, confidence: 0.92, computed_at: soon(0),
 			  visibility_assessment: { rating: 'partial', high_cloud_caveat: false, metar_station: 'KBFI', obs_age_min: 12,
-			    stations_used: ['KBFI', 'KRNT'], computed_at: soon(0),
+			    stations_used: ['KBFI', 'KRNT'], weather_basis: 'metar', computed_at: soon(0),
 			    explanation: 'Mostly cloudy at about 6,000 ft, so the aircraft will be above the clouds and visible only through gaps.' } },
 			{ id: 2, basis: 'live_adsb', callsign: null, icao24: 'c0ffee', aircraft_type: null,
 			  closest_approach_at: soon(6.2), closest_distance_nm: 4.95, altitude_ft: 35000, azimuth_deg: 90,

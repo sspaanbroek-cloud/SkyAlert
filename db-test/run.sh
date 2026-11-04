@@ -25,6 +25,9 @@ if [ -n "$DENO" ]; then
   echo "test: contract (OpenSky parser -> ingest_track_points -> predictions)"
   PAYLOAD="$(DENO_NO_UPDATE_CHECK=1 "$DENO" run --quiet --no-prompt "$ROOT/db-test/contract_adsb.ts")"
   "${PSQL[@]}" -t -A -v payload="$PAYLOAD" -f "$ROOT/db-test/contract_adsb.sql" | grep -v '^$'
+  echo "test: contract (TAF parser -> ingest_tafs -> rate_taf)"
+  PAYLOAD="$(DENO_NO_UPDATE_CHECK=1 "$DENO" run --quiet --no-prompt "$ROOT/db-test/contract_taf.ts")"
+  "${PSQL[@]}" -t -A -v payload="$PAYLOAD" -f "$ROOT/db-test/contract_taf.sql" | grep -v '^$'
 else
   echo "skip: contract test (no deno)"
 fi

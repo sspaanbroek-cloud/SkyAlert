@@ -24,6 +24,7 @@ function setup(opts: { awc?: (url: string, init?: RequestInit) => Response; boxe
 		rpc: async <T>(fn: string, args?: Record<string, unknown>) => {
 			calls.push({ fn, args });
 			if (fn === 'metar_fetch_areas') return { data: (opts.boxes ?? [box]) as T, error: null };
+			if (fn === 'ingest_tafs') return { data: { stored: (args!.tafs as unknown[]).length, unchanged: 0, rejected: [] } as T, error: null };
 			if (fn === 'refresh_visibility_assessments') return { data: { clear: 0, partial: 1, hidden: 0, unknown: 0 } as T, error: null };
 			const n = (args?.reports as unknown[]).length;
 			return { data: { stored: n, unchanged: 0, rejected: [] } as T, error: null };
@@ -78,7 +79,12 @@ Deno.test('no spots: nothing fetched', async () => {
 Deno.test('AWC 204 is an empty result; 429 is retried once', async () => {
 	let n = 0;
 	const { post } = setup({
-		awc: () => (++n === 1 ? new Response(null, { status: 429, headers: { 'Retry-After': '1' } }) : new Response(null, { status: 204 }))
+		awc: (url) =>
+			!url.includes('/metar?')
+				? new Response(null, { status: 204 })
+				: ++n === 1
+					? new Response(null, { status: 429, headers: { 'Retry-After': '1' } })
+					: new Response(null, { status: 204 })
 	});
 	const body = await (await post()).json();
 	assert.equal(n, 2);
@@ -99,4 +105,29 @@ Deno.test('timingSafeEqual', () => {
 	assert.equal(timingSafeEqual('abc', 'abd'), false);
 	assert.equal(timingSafeEqual('abc', 'abcd'), false);
 	assert.equal(timingSafeEqual('', ''), true);
+});
+
+Deno.test('TAFs fetched for the same areas and stored; TAF failure does not block METARs', async () => {
+	const taf = {
+		icaoId: 'KSEA', issueTime: '2026-11-04T14:40:00Z', validTimeFrom: 1793804400, validTimeTo: 1793912400,
+		rawTAF: 'TAF KSEA ...', lat: 47.44, lon: -122.31, elev: 132,
+		fcsts: [{ timeFrom: 1793804400, fcstChange: null, visib: '6+', clouds: [{ cover: 'BKN', base: 6000 }] }]
+	};
+	const ok = setup({
+		awc: (url) => (url.includes('/taf?') ? Response.json([taf]) : Response.json([metar('KBFI', 1793818380, 'KBFI 041853Z 10SM BKN060 A3001')]))
+	});
+	const body = await (await ok.post()).json();
+	assert.ok(ok.urls.some((u) => u.startsWith('https://aviationweather.gov/api/data/taf?bbox=')));
+	assert.equal(body.stored, 1);
+	assert.equal(body.tafs.parsed, 1);
+	assert.deepEqual(body.tafs.result, { stored: 1, unchanged: 0, rejected: [] });
+
+	const broken = setup({
+		awc: (url) => (url.includes('/taf?') ? new Response('', { status: 500 }) : Response.json([metar('KBFI', 1793818380, 'KBFI 041853Z 10SM CLR A3001')]))
+	});
+	const res = await broken.post();
+	const b2 = await res.json();
+	assert.equal(res.status, 200);
+	assert.equal(b2.stored, 1);
+	assert.match(b2.tafs.errors[0], /AWC 500/);
 });

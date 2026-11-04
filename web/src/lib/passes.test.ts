@@ -39,8 +39,12 @@ describe('assessment text', () => {
 		).toBe('ASA123, 33,000 ft, passes at 7:42 pm.');
 	});
 	it('weather source', () => {
-		expect(weatherSource({ metar_station: 'KBFI', obs_age_min: 12 })).toBe('Weather from KBFI, 12 min old');
-		expect(weatherSource({ metar_station: null, obs_age_min: null })).toBeNull();
+		expect(weatherSource({ metar_station: 'KBFI', obs_age_min: 12, weather_basis: 'metar' })).toBe('Weather from KBFI, 12 min old');
+		expect(weatherSource({ metar_station: 'KSEA', obs_age_min: 200, weather_basis: 'taf' })).toBe('Forecast from KSEA, issued 3 h ago');
+		expect(weatherSource({ metar_station: 'KBFI', obs_age_min: 5, weather_basis: 'metar_persistence' })).toBe(
+			'Current weather from KBFI, 5 min old'
+		);
+		expect(weatherSource({ metar_station: null, obs_age_min: null, weather_basis: 'none' })).toBeNull();
 	});
 });
 
