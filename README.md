@@ -21,13 +21,16 @@ supabase/
     …_visibility.sql   rate_sky(), assess_visibility(), refresh_visibility_assessments()
     …_recurring.sql    sightings, recurring-flight detection, 'recurring' predictions
     …_taf.sql          TAF storage, rate_conditions(), rate_taf(), forecast-aware assess_visibility()
+    …_model_cloud.sql  high_cloud_estimate, apply_model_cloud(), model-cloud schedule
   functions/
     _shared/metar.ts   METAR parser (sky from raw text, numbers from AWC JSON)
     _shared/awc.ts     Aviation Weather Center client
     _shared/taf.ts     TAF parser (AWC JSON change groups)
     _shared/opensky.ts OpenSky client (OAuth2 client credentials) + state-vector parser
     ingest-metar/      Edge Function: fetch around every spot, store
+    _shared/openmeteo.ts Open-Meteo client (hourly low/mid/high cloud cover)
     ingest-adsb/       Edge Function: poll OpenSky, store positions, predict passes
+    ingest-model-cloud/ Edge Function: model cloud per spot cell, re-rate passes
   seed.sql           dev data (aircraft types, two Seattle airports)
   tests/             pgTAP tests (`supabase test db`)
 db-test/             run migrations + tests on plain local Postgres, no Docker
@@ -301,6 +304,36 @@ are used and the explanation says conditions may change
 (`weather_basis = 'metar_persistence'`). The cloud rules themselves live in
 one place, `rate_conditions()`, shared by METARs and TAFs.
 
+## High cloud (Open-Meteo)
+
+Ground stations can't see cloud above 12,000 ft. Every hour
+`ingest-model-cloud` fetches Open-Meteo's hourly cloud cover (HRRR/GFS
+"best match") for each spot, rounded to a 0.1° cell, in one request per 100
+cells, and stores it in `high_cloud_estimate` (kept to 6 hours in the past).
+
+After each assessment, `apply_model_cloud()` refines the rating using the
+forecast hour nearest the pass:
+
+- aircraft at or above ~19,700 ft (6 km): the high band;
+- aircraft between the station's 12,000 ft limit and 19,700 ft: the mid band,
+  only when the rating came from an automated station;
+- 70% or more: clear becomes partial ("may be dimmed or hidden at times");
+  30 to 69%: a note; under 30%: "little high cloud", replacing the
+  automated-station caveat.
+
+The model never makes a pass hidden on its own, and hidden/unknown ratings
+are left alone.
+
+**Licence:** Open-Meteo's free API is for non-commercial use (CC BY 4.0,
+attribution required). For commercial use, buy an API key and set it:
+
+```bash
+supabase secrets set OPEN_METEO_API_KEY=...
+```
+
+Requests then go to `customer-api.open-meteo.com`. Deploy with
+`supabase functions deploy ingest-model-cloud`.
+
 ## Web app notes
 
 - Sign-in is email + password via Supabase Auth. If email confirmation is on
@@ -335,6 +368,6 @@ Phase 1 done: schema + auth, shooting spots, METAR ingest, live ADS-B
 predictions, and the clear / partial / hidden rating per pass.
 
 Phase 2, in order: recurring flights (done), TAF forecasts (done), high cloud from
-Open-Meteo, web push alerts, then NASR route resolution and filed flight
+Open-Meteo (done), web push alerts, then NASR route resolution and filed flight
 plans (source to be chosen: FAA SWIM or FlightAware AeroAPI).
 `taf_forecast` and `high_cloud_estimate` are deferred to phase 2.

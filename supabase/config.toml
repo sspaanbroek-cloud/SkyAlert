@@ -431,3 +431,8 @@ verify_jwt = false
 [functions.ingest-adsb]
 enabled = true
 verify_jwt = false
+
+# Model cloud cover (Open-Meteo): hourly from pg_cron, same auth as the others.
+[functions.ingest-model-cloud]
+enabled = true
+verify_jwt = false
