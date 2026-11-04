@@ -1,7 +1,7 @@
 <script lang="ts">
 	import {
+		BASIS_LABEL,
 		RATING_LABEL,
-		clockTime,
 		headline,
 		weatherSource,
 		confidenceLabel,
@@ -11,7 +11,7 @@
 		type Pass
 	} from '#lib/passes.ts';
 
-	let { spotId }: { spotId: string } = $props();
+	let { spotId, timeZone }: { spotId: string; timeZone?: string } = $props();
 
 	const REFRESH_MS = 30_000;
 	let passes: Pass[] | null = $state(null);
@@ -51,7 +51,7 @@
 	{:else if passes.length === 0}
 		<p class="hint">
 			Nothing predicted right now. Live tracking looks for aircraft heading within your search radius, usually 5 to 15
-			minutes ahead. This list refreshes by itself.
+			minutes ahead, and flights seen here regularly appear up to 36 hours ahead. This list refreshes by itself.
 		</p>
 	{:else}
 		<ul>
@@ -65,7 +65,7 @@
 						<span class="rating rating-{a?.rating ?? 'unknown'}">{RATING_LABEL[a?.rating ?? 'unknown']}</span>
 						<span class="when">{when}</span>
 					</div>
-					<p class="detail"><strong>{headline(p)}</strong></p>
+					<p class="detail"><strong>{headline(p, timeZone, now)}</strong></p>
 					{#if a}
 						<p class="detail">{a.explanation}</p>
 					{:else}
@@ -73,7 +73,7 @@
 					{/if}
 					<p class="detail">{[look, `${p.closest_distance_nm.toFixed(1)} nm from you`].filter(Boolean).join(', ')}</p>
 					<p class="hint">
-						{p.basis === 'live_adsb' ? 'Live tracking' : 'Filed flight plan'}{#if conf}&ensp;·&ensp;{conf} confidence{/if}{#if a && weatherSource(a)}&ensp;·&ensp;{weatherSource(a)}{/if}
+						{BASIS_LABEL[p.basis]}{#if conf}&ensp;·&ensp;{conf} confidence{/if}{#if a && weatherSource(a)}&ensp;·&ensp;{weatherSource(a)}{/if}
 					</p>
 				</li>
 			{/each}

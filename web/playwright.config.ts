@@ -14,9 +14,10 @@ export default defineConfig({
 	},
 	use: {
 		baseURL: 'http://localhost:4173',
+		timezoneId: 'America/Los_Angeles',
 		launchOptions: executablePath ? { executablePath } : {}
 	},
 	projects: [
-		{ name: 'mobile', use: { ...devices['Pixel 7'], launchOptions: executablePath ? { executablePath } : {} } }
+		{ name: 'mobile', use: { ...devices['Pixel 7'], timezoneId: 'America/Los_Angeles', launchOptions: executablePath ? { executablePath } : {} } }
 	]
 });

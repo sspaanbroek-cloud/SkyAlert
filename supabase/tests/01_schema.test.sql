@@ -9,7 +9,7 @@ select is(
 
 select is(
   (select count(*)::int from pg_tables where schemaname = 'public'),
-  13, 'all 13 tables created');
+  14, 'all 14 tables created');
 
 select is(
   (select count(*)::int from pg_indexes where schemaname = 'public' and indexdef ilike '%using gist%'),

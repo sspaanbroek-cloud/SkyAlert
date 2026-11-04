@@ -44,7 +44,8 @@ test('create, edit and delete a spot', async ({ page }) => {
 		geog: 'SRID=4326;POINT(-122.2712 47.5134)',
 		elevation_ft: 200,
 		search_radius_nm: 10,
-		min_elevation_deg: 20
+		min_elevation_deg: 20,
+		time_zone: 'America/Los_Angeles' // from the browser (see playwright.config.ts)
 	});
 	await page.screenshot({ path: 'test-results/list.png', fullPage: true });
 
@@ -168,4 +169,38 @@ test('spot page lists upcoming passes with where to look', async ({ page }) => {
 	expect(q.order).toBe('closest_approach_at.asc');
 	expect(q.select).toContain('visibility_assessment(rating,explanation');
 	await page.getByRole('region', { name: 'Coming overhead' }).screenshot({ path: 'test-results/passes.png' });
+});
+
+test('regular flights and usual-flight passes', async ({ page }) => {
+	const tomorrowEvening = new Date(Date.now() + 26 * 3600_000).toISOString();
+	await mockBackend(page, {
+		regulars: [
+			{ id: 1, callsign: 'ASA123', typical_local_time: '19:40:00', days_of_week: [1, 2, 3, 4, 5],
+			  observation_count: 9, distinct_days: 8, time_spread_min: 4, typical_altitude_ft: 33000,
+			  typical_azimuth_deg: 40, typical_elevation_deg: 70, last_seen_at: new Date().toISOString() }
+		],
+		passes: [
+			{ id: 9, basis: 'recurring', callsign: 'ASA123', icao24: null, aircraft_type: null,
+			  closest_approach_at: tomorrowEvening, closest_distance_nm: 1.5, altitude_ft: 33000, azimuth_deg: 40,
+			  elevation_deg: 70, confidence: 0.7, computed_at: new Date().toISOString(), visibility_assessment: null }
+		]
+	});
+	await signIn(page);
+	await page.getByRole('link', { name: 'Add spot' }).click();
+	await page.getByLabel('Name').fill('Kubota Garden hill');
+	await page.getByPlaceholder('latitude, longitude').fill('47.5134, -122.2712');
+	await page.getByRole('button', { name: 'Go' }).click();
+	await expect(page.getByLabel('Time zone')).toHaveValue('America/Los_Angeles');
+	await expect(page.getByLabel('Ground elevation (ft above sea level)')).toHaveValue('200');
+	await page.getByRole('button', { name: 'Save spot' }).click();
+	await page.getByText('Kubota Garden hill').click();
+
+	const regs = page.getByRole('region', { name: 'Regulars over this spot' });
+	await expect(regs.getByText('about 7:40 pm, Mon–Fri')).toBeVisible();
+	await expect(regs.getByText('33,000 ft, look NE, 70° up')).toBeVisible();
+	await expect(regs.getByText('Seen 9 times on 8 days, usually within 4 min of that time')).toBeVisible();
+
+	const passes = page.getByRole('region', { name: 'Coming overhead' });
+	await expect(passes.getByText(/^ASA123, 33,000 ft, passes (tomorrow|\w{3}) at /)).toBeVisible();
+	await expect(passes.getByText('Usual flight · Medium confidence')).toBeVisible();
 });

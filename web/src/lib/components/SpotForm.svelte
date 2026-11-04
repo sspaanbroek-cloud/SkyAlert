@@ -2,7 +2,7 @@
 	import SpotMap from './SpotMap.svelte';
 	import { lookupElevationFt } from '#lib/elevation.ts';
 	import { formatLatLon, horizontalDistanceNm, isValidLatLon, type LatLon } from '#lib/geo.ts';
-	import { SPOT_DEFAULTS, type SpotInput } from '#lib/spots.ts';
+	import { SPOT_DEFAULTS, browserTimeZone, timeZoneOptions, type SpotInput } from '#lib/spots.ts';
 
 	interface Props {
 		initial?: Partial<SpotInput>;
@@ -24,6 +24,8 @@
 	);
 	let radiusNm = $state(seed.search_radius_nm ?? SPOT_DEFAULTS.search_radius_nm);
 	let minElevationDeg = $state(seed.min_elevation_deg ?? SPOT_DEFAULTS.min_elevation_deg);
+	let timeZone = $state(seed.time_zone ?? browserTimeZone());
+	const zones = timeZoneOptions(seed.time_zone ?? browserTimeZone());
 	let coordText = $state(
 		seed.lat != null && seed.lon != null ? `${seed.lat.toFixed(5)}, ${seed.lon.toFixed(5)}` : ''
 	);
@@ -110,7 +112,8 @@
 				lon: point.lon,
 				elevation_ft: elevationFt,
 				search_radius_nm: radiusNm,
-				min_elevation_deg: minElevationDeg
+				min_elevation_deg: minElevationDeg,
+				time_zone: timeZone
 			});
 		} catch (err) {
 			error = (err as Error).message;
@@ -180,6 +183,12 @@
 				: '.'}
 		{/if}
 	</p>
+
+	<label for="tz">Time zone</label>
+	<select id="tz" bind:value={timeZone}>
+		{#each zones as z (z)}<option value={z}>{z.replaceAll('_', ' ')}</option>{/each}
+	</select>
+	<p class="hint">Pass times and "usual" flight times for this spot are shown in this zone.</p>
 
 	{#if error}<p class="msg error" role="alert">{error}</p>{/if}
 

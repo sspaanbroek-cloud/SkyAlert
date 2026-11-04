@@ -15,7 +15,7 @@ export interface Assessment {
 
 export interface Pass {
 	id: number;
-	basis: 'live_adsb' | 'filed_plan';
+	basis: 'live_adsb' | 'filed_plan' | 'recurring';
 	callsign: string | null;
 	icao24: string | null;
 	aircraft_type: string | null;
@@ -95,11 +95,36 @@ export const RATING_LABEL: Record<Rating, string> = {
 	unknown: 'Visibility unknown'
 };
 
-/** "ASA123, 33,000 ft, passes at 7:42 pm." */
-export function headline(p: Pick<Pass, 'callsign' | 'icao24' | 'altitude_ft' | 'closest_approach_at'>, timeZone?: string) {
-	const alt = p.altitude_ft != null ? `${Math.round(p.altitude_ft).toLocaleString('en-US')} ft, ` : '';
-	return `${flightLabel(p)}, ${alt}passes at ${clockTime(p.closest_approach_at, timeZone)}.`;
+/** Local calendar date (YYYY-MM-DD) of an instant in a time zone. */
+function localDate(d: Date, timeZone?: string): string {
+	return d.toLocaleDateString('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' });
 }
+
+/** "" for today, "tomorrow", or a weekday such as "Thu", in the spot's time zone. */
+export function dayLabel(atIso: string, now: Date, timeZone?: string): string {
+	const at = new Date(atIso);
+	const day = localDate(at, timeZone);
+	if (day === localDate(now, timeZone)) return '';
+	if (day === localDate(new Date(now.getTime() + 86_400_000), timeZone)) return 'tomorrow';
+	return at.toLocaleDateString('en-US', { weekday: 'short', timeZone });
+}
+
+/** "ASA123, 33,000 ft, passes at 7:42 pm." (or "passes tomorrow at ...") */
+export function headline(
+	p: Pick<Pass, 'callsign' | 'icao24' | 'altitude_ft' | 'closest_approach_at'>,
+	timeZone?: string,
+	now = new Date()
+) {
+	const alt = p.altitude_ft != null ? `${Math.round(p.altitude_ft).toLocaleString('en-US')} ft, ` : '';
+	const day = dayLabel(p.closest_approach_at, now, timeZone);
+	return `${flightLabel(p)}, ${alt}passes ${day ? `${day} ` : ''}at ${clockTime(p.closest_approach_at, timeZone)}.`;
+}
+
+export const BASIS_LABEL: Record<Pass['basis'], string> = {
+	live_adsb: 'Live tracking',
+	recurring: 'Usual flight',
+	filed_plan: 'Filed flight plan'
+};
 
 export function weatherSource(a: Pick<Assessment, 'metar_station' | 'obs_age_min'>): string | null {
 	if (!a.metar_station) return null;

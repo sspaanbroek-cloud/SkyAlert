@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { clockTime, confidenceLabel, flightLabel, headline, lookLabel, weatherSource, whenLabel } from './passes';
+import { clockTime, confidenceLabel, dayLabel, flightLabel, headline, lookLabel, weatherSource, whenLabel } from './passes';
 
 const now = new Date('2026-11-04T19:36:00Z');
 const at = (s: number) => new Date(now.getTime() + s * 1000).toISOString();
@@ -33,7 +33,8 @@ describe('assessment text', () => {
 		expect(
 			headline(
 				{ callsign: 'ASA123', icao24: 'a1b2c3', altitude_ft: 33000, closest_approach_at: '2026-11-05T03:42:00Z' },
-				'America/Los_Angeles'
+				'America/Los_Angeles',
+				new Date('2026-11-05T01:00:00Z') // 5 pm the same local day
 			)
 		).toBe('ASA123, 33,000 ft, passes at 7:42 pm.');
 	});
@@ -41,4 +42,16 @@ describe('assessment text', () => {
 		expect(weatherSource({ metar_station: 'KBFI', obs_age_min: 12 })).toBe('Weather from KBFI, 12 min old');
 		expect(weatherSource({ metar_station: null, obs_age_min: null })).toBeNull();
 	});
+});
+
+describe('day labels in the spot time zone', () => {
+	const tz = 'America/Los_Angeles';
+	const now = new Date('2026-11-05T01:00:00Z'); // Wed 4 Nov, 5 pm local
+	it('today is blank', () => expect(dayLabel('2026-11-05T03:42:00Z', now, tz)).toBe(''));
+	it('tomorrow', () => expect(dayLabel('2026-11-05T15:10:00Z', now, tz)).toBe('tomorrow'));
+	it('weekday further out', () => expect(dayLabel('2026-11-07T03:40:00Z', now, tz)).toBe('Fri'));
+	it('headline with day', () =>
+		expect(
+			headline({ callsign: 'WKDY2', icao24: null, altitude_ft: null, closest_approach_at: '2026-11-05T15:10:00Z' }, tz, now)
+		).toBe('WKDY2, passes tomorrow at 7:10 am.'));
 });

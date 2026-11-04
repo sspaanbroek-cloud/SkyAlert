@@ -87,6 +87,15 @@ input[type='number'] {
 	background: var(--surface);
 	color: var(--text);
 }
+select {
+	width: 100%;
+	font: inherit;
+	padding: 10px 12px;
+	border: 1px solid var(--border);
+	border-radius: 8px;
+	background: var(--surface);
+	color: var(--text);
+}
 input[type='range'] {
 	width: 100%;
 	accent-color: var(--accent);

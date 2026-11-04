@@ -19,6 +19,7 @@ supabase/
     …_schedules.sql    pg_cron jobs (METAR every 10 min, purges)
     …_adsb.sql         ingest_track_points(), compute_live_predictions(), ADS-B schedule
     …_visibility.sql   rate_sky(), assess_visibility(), refresh_visibility_assessments()
+    …_recurring.sql    sightings, recurring-flight detection, 'recurring' predictions
   functions/
     _shared/metar.ts   METAR parser (sky from raw text, numbers from AWC JSON)
     _shared/awc.ts     Aviation Weather Center client
@@ -260,6 +261,27 @@ The thresholds live in `rate_sky()`. Note: the brief listed BKN under
 "hidden" but its own example treats BKN as visible through gaps; this
 follows the example.
 
+## Recurring flights
+
+Every 5 minutes `record_sightings()` logs each completed live pass (with a
+callsign) in `flight_sighting` (kept 60 days). Nightly,
+`detect_recurring_flights()` looks at the last 28 days per spot and callsign:
+
+- local time of day comes from the spot's `time_zone` and is averaged on a
+  circle, so 23:55 and 00:05 average to midnight;
+- a flight is recurring when it was seen on at least 3 different days with a
+  time spread (circular standard deviation) of 30 minutes or less;
+- `days_of_week` lists the weekdays it was actually seen on, so a daily flight
+  fills in as more days are observed.
+
+Hourly, `refresh_recurring_predictions()` writes `basis = 'recurring'` passes
+for the next 36 hours (flights seen in the last 14 days only), using the
+flight's typical time, altitude, direction and distance. Confidence grows with
+the number of days seen and a tighter time spread, capped at 0.8. When live
+tracking picks the same callsign up within 45 minutes, the live pass replaces
+the usual one. These passes get visibility ratings like any other; until TAF
+support lands they use the latest METAR.
+
 ## Web app notes
 
 - Sign-in is email + password via Supabase Auth. If email confirmation is on
@@ -281,13 +303,19 @@ follows the example.
   30 seconds while the page is visible. Each pass carries its rating badge
   (Clear view / Partly visible / Hidden by cloud / Visibility unknown), the
   explanation, and which station's report it's based on and how old it is.
+- Spots have a time zone (defaults to the browser's). Pass times show the
+  day when it isn't today ("passes tomorrow at 7:10 am"), in that zone.
+- "Regulars over this spot" lists recurring flights: usual time, days,
+  altitude and direction, and how often they've been seen.
 - `#lib/...` imports need the file extension (`#lib/geo.ts`): SvelteKit 3 uses
   Node subpath imports instead of the old `$lib` alias.
 
 ## Status
 
 Phase 1 done: schema + auth, shooting spots, METAR ingest, live ADS-B
-predictions, and the clear / partial / hidden rating per pass. Next is phase 2
-(filed flight plans and route resolution, recurring flights, TAF forecasts,
-high-cloud model data, push alerts).
+predictions, and the clear / partial / hidden rating per pass.
+
+Phase 2, in order: recurring flights (done), TAF forecasts, high cloud from
+Open-Meteo, web push alerts, then NASR route resolution and filed flight
+plans (source to be chosen: FAA SWIM or FlightAware AeroAPI).
 `taf_forecast` and `high_cloud_estimate` are deferred to phase 2.
