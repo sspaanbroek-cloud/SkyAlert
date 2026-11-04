@@ -1,0 +1,37 @@
+# Makes the key pair that lets SkyAlert send phone/browser notifications.
+# Run once: Actions > Generate push notification keys > Run workflow, then open
+# the run and copy the keys from its summary into the repository secrets.
+# Afterwards delete the run (the "..." menu > Delete workflow run), since the
+# summary shows the private key.
+name: Generate push notification keys
+
+on:
+  workflow_dispatch:
+
+jobs:
+  keys:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Generate keys
+        run: |
+          npx --yes web-push@3 generate-vapid-keys --json > keys.json
+          node -e '
+            const k = require("./keys.json");
+            const out = [
+              "## Push notification keys",
+              "",
+              "Copy each value into a repository secret with exactly this name",
+              "(Settings > Secrets and variables > Actions > New repository secret).",
+              "",
+              "**VAPID_PUBLIC_KEY**", "", "```", k.publicKey, "```", "",
+              "**VAPID_PRIVATE_KEY** (keep this one private)", "", "```", k.privateKey, "```", "",
+              "Also put the same public key into Netlify as **VITE_VAPID_PUBLIC_KEY**.",
+              "",
+              "When you have copied them, delete this workflow run."
+            ].join("\n");
+            require("fs").appendFileSync(process.env.GITHUB_STEP_SUMMARY, out + "\n");
+          '
+          rm keys.json

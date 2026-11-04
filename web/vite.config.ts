@@ -11,8 +11,8 @@ export default defineConfig({
 					filename.split(/[/\\]/).includes('node_modules') ? undefined : true
 			},
 			// Client-only SPA: every page talks to Supabase directly (RLS does the
-			// access control), so the build is plain static files with a fallback.
-			adapter: adapter({ fallback: '200.html' })
+			// access control), so the build is plain static files; every path falls back to index.html (see static/_redirects).
+			adapter: adapter({ fallback: 'index.html' })
 		})
 	]
 });

@@ -1,0 +1,10 @@
+# Netlify builds and hosts the SkyAlert web app from the web/ folder.
+# Set VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY and VITE_VAPID_PUBLIC_KEY in
+# Netlify: Site configuration > Environment variables.
+[build]
+  base = "web"
+  command = "npm ci && npm run build"
+  publish = "build"
+
+[build.environment]
+  NODE_VERSION = "22"
