@@ -37,9 +37,15 @@
 				onchange({ lat: e.latlng.lat, lon: e.latlng.lng })
 			);
 			map = created;
+			// Content loading above the map (e.g. the weather card) moves/resizes it;
+			// Leaflet must re-measure or vector layers render clipped.
+			resizeObserver = new ResizeObserver(() => created?.invalidateSize());
+			resizeObserver.observe(el);
 		});
+		let resizeObserver: ResizeObserver | undefined;
 		return () => {
 			cancelled = true;
+			resizeObserver?.disconnect();
 			created?.remove();
 		};
 	});

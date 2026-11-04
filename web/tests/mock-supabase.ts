@@ -30,7 +30,7 @@ export interface SpotRow {
 	updated_at: string;
 }
 
-export async function mockBackend(page: Page, opts: { elevationM?: number | null } = {}) {
+export async function mockBackend(page: Page, opts: { elevationM?: number | null; weather?: unknown[] } = {}) {
 	const spots: SpotRow[] = [];
 	const writes: { method: string; body: unknown }[] = [];
 	let nextId = 1;
@@ -64,6 +64,12 @@ export async function mockBackend(page: Page, opts: { elevationM?: number | null
 		if (url.pathname.endsWith('/logout')) return route.fulfill({ status: 204 });
 		if (url.pathname.endsWith('/user')) return json(route, 200, user);
 		return json(route, 404, { msg: 'not mocked' });
+	});
+
+	await page.route(`${SUPABASE}/rest/v1/rpc/nearby_weather`, async (route) => {
+		const { p_spot_id } = route.request().postDataJSON() as { p_spot_id: string };
+		writes.push({ method: 'RPC nearby_weather', body: p_spot_id });
+		return json(route, 200, opts.weather ?? []);
 	});
 
 	await page.route(`${SUPABASE}/rest/v1/spot**`, async (route) => {

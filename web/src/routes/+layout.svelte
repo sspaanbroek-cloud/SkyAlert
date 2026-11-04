@@ -25,11 +25,11 @@
 
 <svelte:head>
 	<link rel="icon" href={favicon} />
-	<title>Overflight</title>
+	<title>SkyAlert</title>
 </svelte:head>
 
 <header>
-	<a class="brand" href="/">Overflight</a>
+	<a class="brand" href="/">SkyAlert</a>
 	{#if auth.session}
 		<span class="who">{auth.session.user.email}</span>
 		<button onclick={signOut}>Sign out</button>

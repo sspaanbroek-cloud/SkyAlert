@@ -2,6 +2,7 @@
 # Run migrations + seed + pgTAP tests on a throwaway local Postgres cluster.
 # Needs: postgres 16+ server binaries, PostGIS, pgTAP. For the real stack use
 # `supabase start && supabase test db` instead.
+# If Deno is installed (or DENO points at it) a TS->SQL contract test runs too.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PGBIN="${PGBIN:-$(ls -d /usr/lib/postgresql/*/bin | sort -V | tail -1)}"
@@ -16,3 +17,11 @@ for f in "$ROOT"/supabase/migrations/*.sql; do echo "migrate: $(basename "$f")";
 "${PSQL[@]}" -f "$ROOT/supabase/seed.sql"
 "${PSQL[@]}" -c 'create extension if not exists pgtap with schema extensions'
 for t in "$ROOT"/supabase/tests/*.sql; do echo "test: $(basename "$t")"; "${PSQL[@]}" -t -A -f "$t" | grep -v '^$'; done
+DENO="${DENO:-$(command -v deno || true)}"
+if [ -n "$DENO" ]; then
+  echo "test: contract (TS parser -> ingest_metars)"
+  PAYLOAD="$(DENO_NO_UPDATE_CHECK=1 "$DENO" run --quiet --no-prompt "$ROOT/db-test/contract_payload.ts")"
+  "${PSQL[@]}" -t -A -v payload="$PAYLOAD" -f "$ROOT/db-test/contract.sql" | grep -v '^$'
+else
+  echo "skip: contract test (no deno)"
+fi

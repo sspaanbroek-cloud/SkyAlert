@@ -1,4 +1,4 @@
--- Core schema for the overflight app.
+-- Core schema for SkyAlert.
 -- All positions are geography(…, 4326) (lon/lat WGS84, distances in metres).
 -- Altitudes are feet. Distances shown to users are nautical miles.
 set search_path = public, extensions;

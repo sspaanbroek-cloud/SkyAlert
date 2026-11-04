@@ -18,6 +18,7 @@ grant usage on schema public to anon, authenticated, service_role;
 -- Supabase's default privileges: API roles get table privileges, RLS restricts rows.
 alter default privileges in schema public grant all on tables to anon, authenticated, service_role;
 alter default privileges in schema public grant all on sequences to anon, authenticated, service_role;
+alter default privileges in schema public grant all on functions to anon, authenticated, service_role;
 create schema if not exists extensions;
 grant usage on schema extensions to anon, authenticated, service_role;
 alter default privileges in schema extensions grant execute on functions to anon, authenticated, service_role;

@@ -2,7 +2,7 @@
 # https://supabase.com/docs/guides/local-development/cli/config
 # A string used to distinguish different Supabase projects on the same host. Defaults to the
 # working directory name when running `supabase init`.
-project_id = "overflight"
+project_id = "skyalert"
 
 [api]
 enabled = true
@@ -420,3 +420,9 @@ enabled = true
 # formatted with uppercase keywords, indent 2, max width 180, trailing commas,
 # and column/key alignment. Set to "null" to emit raw, unformatted SQL.
 # format_options = "{\"keywordCase\":\"upper\",\"indent\":2,\"maxWidth\":180,\"commaStyle\":\"trailing\"}"
+
+# METAR ingest: called by pg_cron, authenticated by the x-ingest-secret header
+# instead of a user JWT.
+[functions.ingest-metar]
+enabled = true
+verify_jwt = false
