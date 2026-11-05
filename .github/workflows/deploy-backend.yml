@@ -45,9 +45,15 @@ jobs:
             exit 1
           fi
           case "$DB_URL" in
-            *YOUR-PASSWORD*) echo "::error::SUPABASE_DB_URL still contains [YOUR-PASSWORD]. Replace it with your database password."; exit 1;;
+            *YOUR-PASSWORD*)
+              echo "::error::SUPABASE_DB_URL still contains [YOUR-PASSWORD]. Replace it, square brackets included, with your database password."; exit 1;;
+            *:\[*\]@*)
+              echo "::error::SUPABASE_DB_URL has square brackets around the password. Remove the [ and ] so only the password itself is left."; exit 1;;
+            *@db.*.supabase.co*)
+              echo "::error::SUPABASE_DB_URL is the 'Direct connection' string (it starts with db.). GitHub can't reach that one. In Supabase press Connect, choose 'Session pooler', and copy that string instead (it contains pooler.supabase.com)."; exit 1;;
             *pooler.supabase.com*) ;;
-            *) echo "::warning::SUPABASE_DB_URL doesn't look like the 'Session pooler' string. GitHub can only reach Supabase through the pooler.";;
+            *)
+              echo "::error::SUPABASE_DB_URL doesn't look like Supabase's 'Session pooler' string (it should contain pooler.supabase.com)."; exit 1;;
           esac
 
       - uses: actions/checkout@v4
