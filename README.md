@@ -441,6 +441,30 @@ is free but needs approval and an always-on JMS consumer; FlightAware AeroAPI
 is paid and immediate (its route endpoint also returns decoded fixes, which
 could skip NASR resolution). Either only needs to emit `FlightPlanInput`.
 
+## Text messages (SMS)
+
+Two features share one Twilio account:
+
+- **Sign in with a texted code** (Supabase phone auth). Enable it in Supabase:
+  Authentication > Sign In / Providers > Phone, SMS provider Twilio, with the
+  Account SID, Auth Token and Messaging Service SID. The login page's
+  "Phone (text a code)" tab then works; email + password stays available.
+- **Text alerts.** The number is the person's verified Supabase phone (from
+  phone sign-in, or added from the home page with a texted code). People
+  switch texts on with a consent box (`notification_pref`, consent time and
+  wording stored). `send-alerts` sends each alert by push and/or text:
+  plain-ASCII, at most 160 characters, "SkyAlert:" first and "Reply STOP to
+  opt out." last; at most `SMS_DAILY_CAP` (default 20) texts per person per
+  24 hours (`alert_delivery`). A Twilio 21610 error (the number replied STOP)
+  pauses texts for that person until they tick the box again. Twilio's
+  Messaging Service handles STOP/HELP replies itself.
+
+Set `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_MESSAGING_SERVICE_SID`
+(and optionally `SMS_DAILY_CAP`) as GitHub secrets and run Deploy backend.
+Without them, texts are skipped and noted on each alert; push still works.
+US carriers require A2P 10DLC (or toll-free) registration of the sender
+before they deliver app texts reliably.
+
 ## Web app notes
 
 - Sign-in is email + password via Supabase Auth. If email confirmation is on

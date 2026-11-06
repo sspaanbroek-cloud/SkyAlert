@@ -2,9 +2,12 @@
 // Called every minute by pg_cron (migrations/*_alerts.sql).
 // Secrets: INGEST_SECRET, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY,
 // VAPID_SUBJECT (a mailto: or https: contact, required by push services).
+// Optional, for text alerts: TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN,
+// TWILIO_MESSAGING_SERVICE_SID, SMS_DAILY_CAP (default 20 per person).
 import { createClient } from 'npm:@supabase/supabase-js@2';
 // @ts-types="npm:@types/web-push@3"
 import webpush from 'npm:web-push@3';
+import { twilioSender } from '../_shared/sms.ts';
 import { createHandler } from './handler.ts';
 
 const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, {
@@ -17,8 +20,17 @@ webpush.setVapidDetails(
 	Deno.env.get('VAPID_PRIVATE_KEY')!
 );
 
+const twilio = {
+	accountSid: Deno.env.get('TWILIO_ACCOUNT_SID') ?? '',
+	authToken: Deno.env.get('TWILIO_AUTH_TOKEN') ?? '',
+	messagingServiceSid: Deno.env.get('TWILIO_MESSAGING_SERVICE_SID') ?? ''
+};
+const sendSms = twilio.accountSid && twilio.authToken && twilio.messagingServiceSid ? twilioSender(twilio) : undefined;
+
 Deno.serve(
 	createHandler({
+		sendSms,
+		smsDailyCap: Number(Deno.env.get('SMS_DAILY_CAP')) || 20,
 		rpc: async (fn, args) => {
 			const { data, error } = await supabase.rpc(fn, args);
 			return { data, error };

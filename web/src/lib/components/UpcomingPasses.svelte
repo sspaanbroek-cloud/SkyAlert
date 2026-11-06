@@ -13,6 +13,7 @@
 
 	import { cancelReminder, pendingAlerts, remindMe } from '#lib/alerts.ts';
 	import { notificationsGranted } from '#lib/push.ts';
+	import { getPrefs } from '#lib/prefs.ts';
 
 	let { spotId, timeZone, leadMin = 10 }: { spotId: string; timeZone?: string; leadMin?: number } = $props();
 	let alerts: Map<number, { manual: boolean; notify_at: string }> = $state(new Map());
@@ -25,8 +26,13 @@
 
 	async function load() {
 		try {
-			[passes, alerts] = await Promise.all([listUpcomingPasses(spotId), pendingAlerts(spotId)]);
-			canNotify = notificationsGranted();
+			const [p, a, prefs] = await Promise.all([
+				listUpcomingPasses(spotId),
+				pendingAlerts(spotId),
+				getPrefs().catch(() => null)
+			]);
+			[passes, alerts] = [p, a];
+			canNotify = notificationsGranted() || Boolean(prefs?.sms_enabled && !prefs.sms_opted_out_at);
 			error = '';
 		} catch (e) {
 			error = (e as Error).message;
@@ -96,8 +102,8 @@
 								</button>
 							{:else}
 								<button class="small" onclick={() => toggleReminder(p)} disabled={!canNotify}
-									title={canNotify ? '' : 'Turn on notifications on the home page first'}>Remind me</button>
-								{#if !canNotify}<span class="hint">Turn on notifications on the home page to use reminders.</span>{/if}
+									title={canNotify ? '' : 'Turn on notifications or texts on the home page first'}>Remind me</button>
+								{#if !canNotify}<span class="hint">Turn on notifications or texts on the home page to use reminders.</span>{/if}
 							{/if}
 						</div>
 					{/if}

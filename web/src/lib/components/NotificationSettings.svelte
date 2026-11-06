@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { disablePush, enablePush, pushState, type PushState } from '#lib/push.ts';
+	import SmsSettings from './SmsSettings.svelte';
 
 	let status: PushState | 'loading' = $state('loading');
 	let busy = $state(false);
@@ -25,7 +26,8 @@
 </script>
 
 <section class="card" aria-labelledby="notif-heading">
-	<h2 id="notif-heading">Notifications on this device</h2>
+	<h2 id="notif-heading">Notifications</h2>
+	<h3 class="sub">On this device</h3>
 	{#if status === 'loading'}
 		<p class="hint">Checking…</p>
 	{:else if status === 'no-key'}
@@ -50,11 +52,16 @@
 		</button>
 	{/if}
 	{#if error}<p class="msg error" role="alert">{error}</p>{/if}
+	<SmsSettings />
 </section>
 
 <style>
 	h2 {
 		font-size: 1.125rem;
 		margin: 0 0 8px;
+	}
+	.sub {
+		font-size: 1rem;
+		margin: 0 0 6px;
 	}
 </style>

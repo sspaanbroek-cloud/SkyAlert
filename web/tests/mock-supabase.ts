@@ -37,7 +37,8 @@ export async function mockBackend(page: Page, opts: { elevationM?: number | null
 	const alerts: { prediction_id: number; manual: boolean; notify_at: string; spot_id: string }[] = [];
 	let nextId = 1;
 
-	const user = { id: USER_ID, email: 'pilot@example.com', aud: 'authenticated', role: 'authenticated' };
+	const user: Record<string, unknown> = { id: USER_ID, email: 'pilot@example.com', aud: 'authenticated', role: 'authenticated', phone: '' };
+	let prefs: Record<string, unknown> | null = null;
 	const session = () => ({
 		access_token: fakeJwt(),
 		token_type: 'bearer',
@@ -64,6 +65,22 @@ export async function mockBackend(page: Page, opts: { elevationM?: number | null
 			return json(route, 200, session());
 		}
 		if (url.pathname.endsWith('/logout')) return route.fulfill({ status: 204 });
+		if (url.pathname.endsWith('/otp')) {
+			writes.push({ method: 'AUTH otp', body: route.request().postDataJSON() });
+			return json(route, 200, {});
+		}
+		if (url.pathname.endsWith('/verify')) {
+			const body = route.request().postDataJSON() as { phone: string; token: string; type: string };
+			writes.push({ method: 'AUTH verify', body });
+			if (body.token !== '123456') return json(route, 403, { code: 403, error_code: 'otp_expired', msg: 'Token has expired or is invalid' });
+			Object.assign(user, { phone: body.phone.replace(/^\+/, ''), phone_confirmed_at: new Date().toISOString() });
+			if (body.type === 'sms') user.email = '';
+			return json(route, 200, session());
+		}
+		if (url.pathname.endsWith('/user') && route.request().method() === 'PUT') {
+			writes.push({ method: 'AUTH update user', body: route.request().postDataJSON() });
+			return json(route, 200, user);
+		}
 		if (url.pathname.endsWith('/user')) return json(route, 200, user);
 		return json(route, 404, { msg: 'not mocked' });
 	});
@@ -97,6 +114,19 @@ export async function mockBackend(page: Page, opts: { elevationM?: number | null
 			return route.fulfill({ status: 204 });
 		}
 		return json(route, 405, {});
+	});
+
+	await page.route(`${SUPABASE}/rest/v1/notification_pref**`, async (route) => {
+		const req = route.request();
+		if (req.method() === 'POST') {
+			const body = req.postDataJSON();
+			writes.push({ method: 'UPSERT notification_pref', body });
+			prefs = { push_enabled: true, sms_opted_out_at: null, ...(prefs ?? {}), ...body };
+			return route.fulfill({ status: 201 });
+		}
+		const wantsObject = (req.headers()['accept'] ?? '').includes('vnd.pgrst.object');
+		if (!prefs) return wantsObject ? json(route, 406, { code: 'PGRST116', message: 'no rows' }) : json(route, 200, []);
+		return json(route, 200, wantsObject ? prefs : [prefs]);
 	});
 
 	await page.route(`${SUPABASE}/rest/v1/recurring_flight**`, (route) => json(route, 200, opts.regulars ?? []));

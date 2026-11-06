@@ -6,7 +6,7 @@ do $$ begin
   if not exists (select from pg_roles where rolname = 'service_role') then create role service_role nologin bypassrls; end if;
 end $$;
 create schema auth;
-create table auth.users (id uuid primary key, email text);
+create table auth.users (id uuid primary key, email text, phone text, phone_confirmed_at timestamptz);  -- same columns as Supabase uses here
 create function auth.uid() returns uuid language sql stable as
 $$ select coalesce(
      nullif(current_setting('request.jwt.claim.sub', true), ''),

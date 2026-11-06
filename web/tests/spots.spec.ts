@@ -221,7 +221,7 @@ test('notifications: turn on, alert settings, remind me', async ({ page, context
 	});
 	await signIn(page);
 
-	const card = page.getByRole('region', { name: 'Notifications on this device' });
+	const card = page.getByRole('region', { name: 'Notifications' });
 	await card.getByRole('button', { name: 'Turn on notifications' }).click();
 	await expect(card.getByRole('button', { name: 'Turn off on this device' })).toBeVisible();
 	expect(backend.writes.find((w) => w.method === 'RPC save_push_subscription')?.body).toMatchObject({
@@ -277,7 +277,7 @@ test('remind me is disabled until notifications are on', async ({ page }) => {
 	await page.getByText('X', { exact: true }).click();
 	const passes = page.getByRole('region', { name: 'Coming overhead' });
 	await expect(passes.getByRole('button', { name: 'Remind me' })).toBeDisabled();
-	await expect(passes.getByText('Turn on notifications on the home page to use reminders.')).toBeVisible();
+	await expect(passes.getByText('Turn on notifications or texts on the home page to use reminders.')).toBeVisible();
 });
 
 test('service worker shows a delivered push as a notification', async ({ page, context }) => {
@@ -309,4 +309,65 @@ test('service worker shows a delivered push as a notification', async ({ page, c
 			})
 		)
 		.toEqual(['ASA123 overhead in 6 min | Clear view · 33,000 ft | pass-42 | /spots/abc']);
+});
+
+test('sign in with a texted code', async ({ page }) => {
+	const backend = await mockBackend(page);
+	await page.goto('/login');
+	await page.getByRole('tab', { name: 'Phone (text a code)' }).click();
+	await page.getByLabel('Mobile number').fill('(415) 555-0101');
+	await page.getByRole('button', { name: 'Text me a code' }).click();
+	await expect(page.getByText('We texted a code to +1 415 555 0101.')).toBeVisible();
+	expect(backend.writes.find((w) => w.method === 'AUTH otp')?.body).toMatchObject({ phone: '+14155550101' });
+
+	await page.getByLabel('Code').fill('000000');
+	await page.getByRole('button', { name: 'Sign in' }).click();
+	await expect(page.getByRole('alert')).toHaveText('Token has expired or is invalid');
+
+	await page.getByLabel('Code').fill('123456');
+	await page.getByRole('button', { name: 'Sign in' }).click();
+	await expect(page.getByRole('heading', { name: 'Your shooting spots' })).toBeVisible();
+	await expect(page.getByText('+14155550101')).toBeVisible(); // header shows the phone account
+	expect(backend.writes.find((w) => w.method === 'AUTH verify' && (w.body as { token: string }).token === '123456')?.body)
+		.toMatchObject({ phone: '+14155550101', type: 'sms' });
+});
+
+test('add a phone number and turn on text alerts', async ({ page }) => {
+	const backend = await mockBackend(page, {
+		passes: [
+			{ id: 9, basis: 'recurring', callsign: 'ASA123', icao24: null, aircraft_type: null,
+			  closest_approach_at: new Date(Date.now() + 3 * 3600_000).toISOString(), closest_distance_nm: 1.5,
+			  altitude_ft: 33000, azimuth_deg: 40, elevation_deg: 70, confidence: 0.7,
+			  computed_at: new Date().toISOString(), visibility_assessment: null }
+		]
+	});
+	await signIn(page);
+	const card = page.getByRole('region', { name: 'Notifications' });
+	await card.getByLabel('Mobile number').fill('415-555-0101');
+	await card.getByRole('button', { name: 'Text me a code' }).click();
+	expect(backend.writes.find((w) => w.method === 'AUTH update user')?.body).toMatchObject({ phone: '+14155550101' });
+	await card.getByLabel('Code from the text').fill('123456');
+	await card.getByRole('button', { name: 'Verify' }).click();
+	await expect(card.getByText('Texts go to +1 415 555 0101.')).toBeVisible();
+	expect(backend.writes.find((w) => w.method === 'AUTH verify')?.body).toMatchObject({ type: 'phone_change' });
+
+	await card.getByLabel('Send my alerts and reminders by text').check();
+	await expect(card.getByLabel('Send my alerts and reminders by text')).toBeChecked();
+	const up = backend.writes.find((w) => w.method === 'UPSERT notification_pref')!.body as Record<string, unknown>;
+	expect(up.sms_enabled).toBe(true);
+	expect(up.sms_consent_text).toContain('Reply STOP to stop');
+	expect(typeof up.sms_consent_at).toBe('string');
+
+	// Reminders now work with texts alone (no browser notifications granted).
+	await page.getByRole('link', { name: 'Add spot' }).click();
+	await page.getByLabel('Name').fill('X');
+	await page.getByPlaceholder('latitude, longitude').fill('47.5134, -122.2712');
+	await page.getByRole('button', { name: 'Go' }).click();
+	await expect(page.getByLabel('Ground elevation (ft above sea level)')).toHaveValue('200');
+	await page.getByRole('button', { name: 'Save spot' }).click();
+	await page.getByText('X', { exact: true }).click();
+	await expect(page.getByRole('region', { name: 'Coming overhead' }).getByRole('button', { name: 'Remind me' })).toBeEnabled();
+	await page.getByRole('region', { name: 'Notifications' }).waitFor({ state: 'detached' }).catch(() => {});
+	await page.goto('/');
+	await page.getByRole('region', { name: 'Notifications' }).screenshot({ path: 'test-results/notifications.png' });
 });

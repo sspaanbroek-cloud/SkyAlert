@@ -31,7 +31,7 @@
 <header>
 	<a class="brand" href="/">SkyAlert</a>
 	{#if auth.session}
-		<span class="who">{auth.session.user.email}</span>
+		<span class="who">{auth.session.user.email || (auth.session.user.phone ? `+${auth.session.user.phone.replace(/^\+/, '')}` : '')}</span>
 		<button onclick={signOut}>Sign out</button>
 	{/if}
 </header>

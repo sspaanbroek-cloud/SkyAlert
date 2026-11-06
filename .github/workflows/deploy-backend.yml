@@ -26,6 +26,11 @@ jobs:
       VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
       VAPID_SUBJECT: ${{ secrets.VAPID_SUBJECT }}
       OPEN_METEO_API_KEY: ${{ secrets.OPEN_METEO_API_KEY }}
+      # Optional: text-message alerts (all three needed to switch texts on)
+      TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
+      TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
+      TWILIO_MESSAGING_SERVICE_SID: ${{ secrets.TWILIO_MESSAGING_SERVICE_SID }}
+      SMS_DAILY_CAP: ${{ secrets.SMS_DAILY_CAP }}
     steps:
       - name: Check that all secrets are filled in
         run: |
@@ -40,6 +45,10 @@ jobs:
           check VAPID_PUBLIC_KEY "$VAPID_PUBLIC_KEY"
           check VAPID_PRIVATE_KEY "$VAPID_PRIVATE_KEY"
           check VAPID_SUBJECT "$VAPID_SUBJECT"
+          n=0; for v in "$TWILIO_ACCOUNT_SID" "$TWILIO_AUTH_TOKEN" "$TWILIO_MESSAGING_SERVICE_SID"; do [ -n "$v" ] && n=$((n+1)); done
+          if [ "$n" -gt 0 ] && [ "$n" -lt 3 ]; then
+            echo "::warning::Text alerts need all three of TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN and TWILIO_MESSAGING_SERVICE_SID. Texts stay off until all three are set."
+          fi
           if [ -n "$missing" ]; then
             echo "::error::These GitHub secrets are missing or empty:$missing"
             exit 1
@@ -76,6 +85,11 @@ jobs:
             echo "VAPID_PRIVATE_KEY=$VAPID_PRIVATE_KEY"
             echo "VAPID_SUBJECT=$VAPID_SUBJECT"
             [ -n "$OPEN_METEO_API_KEY" ] && echo "OPEN_METEO_API_KEY=$OPEN_METEO_API_KEY"
+            [ -n "$TWILIO_ACCOUNT_SID" ] && echo "TWILIO_ACCOUNT_SID=$TWILIO_ACCOUNT_SID"
+            [ -n "$TWILIO_AUTH_TOKEN" ] && echo "TWILIO_AUTH_TOKEN=$TWILIO_AUTH_TOKEN"
+            [ -n "$TWILIO_MESSAGING_SERVICE_SID" ] && echo "TWILIO_MESSAGING_SERVICE_SID=$TWILIO_MESSAGING_SERVICE_SID"
+            [ -n "$SMS_DAILY_CAP" ] && echo "SMS_DAILY_CAP=$SMS_DAILY_CAP"
+            true
           } > "$RUNNER_TEMP/functions.env"
           supabase secrets set --remote="$PROJECT_REF" --env-file "$RUNNER_TEMP/functions.env" --yes
           rm -f "$RUNNER_TEMP/functions.env"
