@@ -2,7 +2,7 @@
 	import '../app.css';
 	import favicon from '#lib/assets/favicon.svg';
 	import { auth } from '#lib/auth.svelte.ts';
-	import { supabase } from '#lib/supabase.ts';
+	import { configError, supabase } from '#lib/supabase.ts';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import type { LayoutProps } from './$types';
@@ -13,7 +13,7 @@
 
 	// Simple guard: everything except /login needs a session.
 	$effect(() => {
-		if (!auth.ready) return;
+		if (!auth.ready || configError) return;
 		if (!auth.session && !isLogin) goto('/login', { replaceState: true });
 		if (auth.session && isLogin) goto('/', { replaceState: true });
 	});
@@ -37,7 +37,12 @@
 </header>
 
 <main>
-	{#if !auth.ready}
+	{#if configError}
+		<div class="card" role="alert">
+			<h1 style="margin-top:0">SkyAlert isn't set up yet</h1>
+			<p>{configError}</p>
+		</div>
+	{:else if !auth.ready}
 		<p class="hint">Loading…</p>
 	{:else if auth.session || isLogin}
 		{@render children()}
