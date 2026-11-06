@@ -11,7 +11,8 @@ const key = import.meta.env.VITE_SUPABASE_ANON_KEY;
 export const configError: string | null = !url || !key
 	? `This copy of SkyAlert was built without ${[!url && 'VITE_SUPABASE_URL', !key && 'VITE_SUPABASE_ANON_KEY'].filter(Boolean).join(' and ')}. Add ${!url && !key ? 'them' : 'it'} in Netlify (Project configuration > Environment variables), then redeploy.`
 	: !/^https:\/\/[a-z0-9-]+\.supabase\.co\/?$/.test(url) && !url.startsWith('http://')
-		? `VITE_SUPABASE_URL should look like https://yourprojectid.supabase.co (it is "${url}"). Fix it in Netlify, then redeploy.`
+		? // Never echo the value: if it's wrong, it may be a secret.
+			'VITE_SUPABASE_URL should look like https://yourprojectid.supabase.co. Fix it in Netlify, then redeploy.'
 		: null;
 
 export const supabase: SupabaseClient = configError
