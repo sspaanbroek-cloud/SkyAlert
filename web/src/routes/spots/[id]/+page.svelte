@@ -52,7 +52,7 @@
 	<h1>{spot.name}</h1>
 	<UpcomingPasses spotId={spot.id} timeZone={spot.time_zone} leadMin={spot.alerts_lead_min} />
 	<div style="height:12px"></div>
-	<NearbyWeather spotId={spot.id} />
+	<NearbyWeather spotId={spot.id} timeZone={spot.time_zone} />
 	<div style="height:12px"></div>
 	<RegularFlights spotId={spot.id} />
 	<h2 style="font-size:1.125rem;margin:24px 0 0">Edit spot</h2>

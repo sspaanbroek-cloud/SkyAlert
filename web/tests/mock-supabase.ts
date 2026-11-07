@@ -31,7 +31,7 @@ export interface SpotRow {
 	updated_at: string;
 }
 
-export async function mockBackend(page: Page, opts: { elevationM?: number | null; weather?: unknown[]; passes?: unknown[]; regulars?: unknown[] } = {}) {
+export async function mockBackend(page: Page, opts: { elevationM?: number | null; weather?: unknown[]; passes?: unknown[]; regulars?: unknown[]; forecast?: unknown[] } = {}) {
 	const spots: SpotRow[] = [];
 	const writes: { method: string; body: unknown }[] = [];
 	const alerts: { prediction_id: number; manual: boolean; notify_at: string; spot_id: string }[] = [];
@@ -90,6 +90,8 @@ export async function mockBackend(page: Page, opts: { elevationM?: number | null
 		writes.push({ method: 'RPC nearby_weather', body: p_spot_id });
 		return json(route, 200, opts.weather ?? []);
 	});
+
+	await page.route(`${SUPABASE}/rest/v1/rpc/nearby_forecast`, (route) => json(route, 200, opts.forecast ?? []));
 
 	await page.route(`${SUPABASE}/rest/v1/rpc/*_push_subscription`, async (route) => {
 		const name = new URL(route.request().url()).pathname.split('/').pop()!;

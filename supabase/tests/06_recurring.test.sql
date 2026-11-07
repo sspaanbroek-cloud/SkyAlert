@@ -45,7 +45,7 @@ select ok((select typical_local_time >= '23:55' or typical_local_time <= '00:05'
 select is((select observation_count from recurring_flight where callsign = 'DAILY1'), 7, 'observation count');
 
 -- Predictions for the next 36 h.
-select ok((refresh_recurring_predictions()->>'upserted')::int >= 2, 'recurring predictions generated');
+select ok((refresh_recurring_predictions()->>'upserted')::int >= 1, 'recurring predictions generated (the daily flight always has a slot in 36 h; weekday ones may not)');
 select ok((select bool_and((closest_approach_at at time zone 'America/Los_Angeles')::time = '19:40')
            from overflight_prediction where callsign = 'DAILY1'), 'DAILY1 slots at 19:40 local');
 select ok((select coalesce(bool_and(extract(isodow from closest_approach_at at time zone 'America/Los_Angeles') between 1 and 5), true)

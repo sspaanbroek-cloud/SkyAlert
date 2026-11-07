@@ -100,15 +100,26 @@ test('spot page shows plain-language sky from nearby stations', async ({ page })
 			{ station: 'KBFI', station_name: 'Seattle/Boeing Fld, WA, US', distance_nm: 1.6, bearing_deg: 310,
 			  station_elevation_ft: 20, observed_at: new Date().toISOString(), age_min: 12, flight_category: 'VFR',
 			  is_auto: false, visibility_sm: 10, visibility_is_min: true, wx_string: null,
-			  raw_text: 'KBFI 041853Z 17006KT 10SM FEW025 BKN060 12/08 A3001',
+			  raw_text: 'KBFI 041853Z 17006KT 10SM FEW025 BKN060 12/08 A3001 RMK AO2 OCNL LTGICCG DSNT NE',
 			  sky_summary: 'A few wisps at 2,500 ft above ground, then mostly cloudy with gaps at 6,000 ft above ground',
-			  layers: [] },
+			  layers: [], lightning_remark: 'OCNL LTGICCG DSNT NE' },
 			{ station: 'KRNT', station_name: 'Renton Muni, WA, US', distance_nm: 2.5, bearing_deg: 120,
 			  station_elevation_ft: 30, observed_at: new Date().toISOString(), age_min: 125, flight_category: 'VFR',
 			  is_auto: true, visibility_sm: 10, visibility_is_min: true, wx_string: '-RA',
 			  raw_text: 'KRNT 041653Z AUTO 00000KT 10SM -RA CLR 11/07 A3002',
-			  sky_summary: "No cloud below 12,000 ft (automated sensor; it can't see higher)", layers: [] }
-		]
+			  sky_summary: "No cloud below 12,000 ft (automated sensor; it can't see higher)", layers: [], lightning_remark: null }
+		],
+		forecast: (() => {
+			const h = (n: number) => new Date(Date.now() + n * 3600_000).toISOString();
+			const base = { station: 'KSEA', station_name: 'Seattle-Tacoma Intl', distance_nm: 4.9, bearing_deg: 215,
+				issued_at: h(-2), issued_age_min: 120, valid_to: h(22), raw_text: 'TAF KSEA 071140Z 0712/0818 18008KT P6SM BKN060 TEMPO 0714/0716 3SM TSRA BKN025CB FM072100 OVC030',
+				probability: null, visibility_is_min: false };
+			return [
+				{ ...base, seq: 0, change_type: 'BASE', time_from: h(-1), time_to: h(3), cloud_summary: 'Mostly cloudy with gaps at 6,000 ft above ground', visibility_sm: 6, visibility_is_min: true, wx_string: null, thunder: false },
+				{ ...base, seq: 1, change_type: 'TEMPO', time_from: h(1), time_to: h(2), cloud_summary: 'Mostly cloudy with gaps at 2,500 ft above ground (thunderstorm clouds)', visibility_sm: 3, wx_string: 'TSRA', thunder: true },
+				{ ...base, seq: 2, change_type: 'FM', time_from: h(3), time_to: h(22), cloud_summary: 'Solid overcast at 3,000 ft above ground', visibility_sm: 5, wx_string: '-RA', thunder: false }
+			];
+		})()
 	});
 	await signIn(page);
 	await page.getByRole('link', { name: 'Add spot' }).click();
@@ -120,12 +131,27 @@ test('spot page shows plain-language sky from nearby stations', async ({ page })
 	await page.getByText('Kubota Garden hill').click();
 
 	const sky = page.getByRole('region', { name: 'Sky near this spot' });
-	await expect(sky.getByText('mostly cloudy with gaps at 6,000 ft above ground')).toBeVisible();
+	await expect(sky.getByText('A few wisps at 2,500 ft above ground, then mostly cloudy with gaps at 6,000 ft above ground')).toBeVisible();
 	await expect(sky.getByText('1.6 nm NW')).toBeVisible();
 	await expect(sky.getByText('Reported 12 min ago')).toBeVisible();
 	await expect(sky.getByText('Reported 2 h 5 min ago (old report)')).toBeVisible();
 	await expect(sky.getByText("No cloud below 12,000 ft (automated sensor; it can't see higher)")).toBeVisible();
 	await expect(sky.getByText('over 10 mi visibility').first()).toBeVisible();
+	await expect(sky.getByText(/visibility\s+·\s+light rain$/)).toBeVisible(); // KRNT's "-RA" in plain words
+
+	// Lightning bolt beside KBFI's sky, explained
+	await expect(sky.getByRole('img', { name: 'Lightning reported: occasional, in-cloud and cloud-to-ground, distant (10 to 30 miles), to the NE' })).toBeVisible();
+	await expect(sky.getByRole('img', { name: /^Lightning reported/ })).toHaveCount(1);
+
+	// Forecast from the TAF
+	await expect(sky.getByRole('heading', { name: 'Forecast' })).toBeVisible();
+	await expect(sky.getByText('KSEA airport forecast, 4.9 nm SW, issued 2 h ago')).toBeVisible();
+	await expect(sky.getByText(/^Now–\d{1,2}:\d{2} (am|pm)$/)).toBeVisible();
+	await expect(sky.getByText(/^At times, /)).toBeVisible();
+	await expect(sky.getByText('Mostly cloudy with gaps at 2,500 ft above ground (thunderstorm clouds), thunderstorm with rain, visibility 3 miles')).toBeVisible();
+	await expect(sky.getByRole('img', { name: 'Thunderstorms forecast' })).toBeVisible();
+	await expect(sky.getByText('Solid overcast at 3,000 ft above ground, light rain, visibility 5 miles')).toBeVisible();
+	await sky.screenshot({ path: 'test-results/sky-card.png' });
 	expect(backend.writes.find((w) => w.method === 'RPC nearby_weather')?.body).toBe(backend.spots[0].id);
 	await page.screenshot({ path: 'test-results/spot-weather.png', fullPage: true });
 });

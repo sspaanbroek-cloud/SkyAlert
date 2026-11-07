@@ -478,8 +478,16 @@ before they deliver app texts reliably.
   Stadia, etc.) before launch.
 - Each spot's page shows "Sky near this spot": the latest report from the 3
   nearest stations (`nearby_weather()`), with distance and direction, the
-  plain-language summary, report age (flagged when over 90 minutes), and the
-  raw METAR.
+  plain-language summary, report age (flagged when over 90 minutes), weather
+  codes in plain words ("-SHRA BR" -> "light rain showers, mist"), and the
+  raw METAR. A lightning bolt follows the sky summary when the METAR's
+  remarks mention LTG (`lightning_remark()`); hovering it explains the remark
+  ("occasional, in-cloud and cloud-to-ground, distant, to the NE").
+- Below that, **Forecast**: the TAF from the nearest station within 40 nm
+  (`nearby_forecast()`), one line per change group over the next 12 hours
+  ("Now–3:00 pm", "At times, 6:00–8:00 pm", "30% chance, tomorrow ..."), with
+  cloud, weather and visibility in plain words, a bolt on lines forecasting
+  thunderstorms (TS), and the raw TAF.
 - Each spot's page also shows "Coming overhead": predicted passes from 2
   minutes ago onwards, with time, altitude, distance, where to look (compass
   direction and angle above the horizon) and confidence. It refreshes every

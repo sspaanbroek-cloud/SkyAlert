@@ -16,6 +16,36 @@ export interface StationWeather {
 	raw_text: string;
 	sky_summary: string;
 	layers: { cover: string; cloud_type: string | null; base_agl_ft: number; base_msl_ft: number; plain_label: string }[];
+	/** Lightning phrase from the METAR remarks, e.g. "OCNL LTGICCG DSNT NE". */
+	lightning_remark: string | null;
+}
+
+export interface ForecastPeriod {
+	station: string;
+	station_name: string | null;
+	distance_nm: number;
+	bearing_deg: number;
+	issued_at: string;
+	issued_age_min: number;
+	valid_to: string;
+	raw_text: string;
+	seq: number;
+	change_type: 'BASE' | 'FM' | 'BECMG' | 'TEMPO' | 'PROB';
+	probability: number | null;
+	time_from: string;
+	time_to: string;
+	cloud_summary: string | null;
+	visibility_sm: number | null;
+	visibility_is_min: boolean;
+	wx_string: string | null;
+	thunder: boolean;
+}
+
+/** The nearest airport forecast (TAF), as its change groups over the next `hours`. */
+export async function getNearbyForecast(spotId: string, hours = 12): Promise<ForecastPeriod[]> {
+	const { data, error } = await supabase.rpc('nearby_forecast', { p_spot_id: spotId, p_hours: hours });
+	if (error) throw error;
+	return (data ?? []) as ForecastPeriod[];
 }
 
 /** Reports older than this are flagged: METARs are normally hourly. */
