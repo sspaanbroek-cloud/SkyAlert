@@ -80,9 +80,34 @@
 	}
 </script>
 
-<div class="map" bind:this={el} role="application" aria-label="Map. Tap to place your shooting spot."></div>
+<div class="wrap">
+	<div class="map" class:empty={!value} bind:this={el} role="application" aria-label="Map. Tap to place your shooting spot."></div>
+	{#if !value}<div class="tap-hint" aria-hidden="true">Tap the map to place your spot</div>{/if}
+</div>
 
 <style>
+	.wrap {
+		position: relative;
+	}
+	.map.empty {
+		cursor: crosshair;
+	}
+	.tap-hint {
+		position: absolute;
+		left: 50%;
+		bottom: 28px;
+		transform: translateX(-50%);
+		z-index: 500;
+		pointer-events: none;
+		padding: 6px 12px;
+		border-radius: 999px;
+		background: var(--surface);
+		color: var(--text);
+		font-size: 0.875rem;
+		font-weight: 600;
+		box-shadow: 0 1px 4px rgb(0 0 0 / 0.25);
+		white-space: nowrap;
+	}
 	.map {
 		height: min(55vh, 420px);
 		border-radius: var(--radius);

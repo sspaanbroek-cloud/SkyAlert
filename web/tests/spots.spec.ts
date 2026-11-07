@@ -397,3 +397,49 @@ test('add a phone number and turn on text alerts', async ({ page }) => {
 	await page.goto('/');
 	await page.getByRole('region', { name: 'Notifications' }).screenshot({ path: 'test-results/notifications.png' });
 });
+
+test('pick a spot by airport code', async ({ page }) => {
+	const ksea = { ident: 'KSEA', code: 'KSEA', name: 'Seattle–Tacoma International Airport', municipality: 'Seattle',
+		iso_country: 'US', type: 'large_airport', lat: 47.449, lon: -122.309, elevation_ft: 433, matched: 'iata' };
+	const backend = await mockBackend(page, {
+		airports: {
+			SEA: [ksea],
+			SPR: [
+				{ ident: 'KSPR', code: 'KSPR', name: 'Example Field', municipality: 'Springfield', iso_country: 'US',
+				  type: 'small_airport', lat: 39.8, lon: -89.6, elevation_ft: 597, matched: 'local' },
+				{ ident: 'XSPR', code: 'XSPR', name: 'Other Springfield Strip', municipality: 'Springfield', iso_country: 'US',
+				  type: 'small_airport', lat: 37.2, lon: -93.3, elevation_ft: 1268, matched: 'local' }
+			]
+		}
+	});
+	await signIn(page);
+	await page.getByRole('link', { name: 'Add spot' }).click();
+	await expect(page.getByText('Tap the map to place your spot')).toBeVisible();
+	await page.screenshot({ path: 'test-results/spot-form-empty.png' });
+
+	// Unknown code
+	await page.getByLabel('Start from an airport').fill('zzzz');
+	await page.getByRole('button', { name: 'Find' }).click();
+	await expect(page.getByRole('alert')).toHaveText('No airport found for "ZZZZ".');
+
+	// Several matches: pick one
+	await page.getByLabel('Start from an airport').fill('spr');
+	await page.getByRole('button', { name: 'Find' }).click();
+	await page.getByRole('list', { name: 'Airports found' }).getByRole('button', { name: /XSPR Other Springfield Strip/ }).click();
+	await expect(page.getByTestId('point')).toHaveText('37.2000° N, 93.3000° W');
+
+	// One match: placed straight away, name filled in
+	await page.getByLabel('Name').fill('');
+	await page.getByLabel('Start from an airport').fill('sea');
+	await page.getByLabel('Start from an airport').press('Enter');
+	await expect(page.getByRole('status')).toHaveText("Pin placed at KSEA, Seattle–Tacoma International Airport. Drag it to where you'll stand.");
+	await expect(page.getByTestId('point')).toHaveText('47.4490° N, 122.3090° W');
+	await expect(page.getByLabel('Name')).toHaveValue('Near KSEA');
+	await expect(page.getByText('Tap the map to place your spot')).toHaveCount(0);
+	await expect(page.locator('.spot-pin')).toBeVisible();
+	await expect(page.getByLabel('Ground elevation (ft above sea level)')).toHaveValue('200'); // terrain lookup (mocked)
+	await page.screenshot({ path: 'test-results/spot-form-airport.png' });
+	await page.getByRole('button', { name: 'Save spot' }).click();
+	await expect(page.getByText('Near KSEA')).toBeVisible();
+	expect(backend.writes.find((w) => w.method === 'POST')?.body).toMatchObject({ name: 'Near KSEA', geog: 'SRID=4326;POINT(-122.309 47.449)' });
+});

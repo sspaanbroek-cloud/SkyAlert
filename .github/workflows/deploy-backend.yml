@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths: ['supabase/**', '.github/workflows/deploy-backend.yml', '.github/scripts/vault.sql']
+    paths: ['supabase/**', '.github/workflows/deploy-backend.yml', '.github/scripts/**']
 
 concurrency: deploy-backend
 
@@ -74,6 +74,11 @@ jobs:
 
       - name: Update the database
         run: supabase db push --remote="$DB_URL" --yes
+
+      - name: Load the airport directory (OurAirports, public domain)
+        run: |
+          sudo apt-get install -y -qq postgresql-client >/dev/null
+          .github/scripts/load-airports.sh "$DB_URL"
 
       - name: Store secrets for the background jobs
         run: |

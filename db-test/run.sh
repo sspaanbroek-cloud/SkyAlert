@@ -16,6 +16,9 @@ PSQL=(psql -h "$WORK" -p "$PORT" -U postgres -d postgres -v ON_ERROR_STOP=1 -q -
 for f in "$ROOT"/supabase/migrations/*.sql; do echo "migrate: $(basename "$f")"; "${PSQL[@]}" -f "$f"; done
 "${PSQL[@]}" -f "$ROOT/supabase/seed.sql"
 "${PSQL[@]}" -c 'create extension if not exists pgtap with schema extensions'
+# A few real OurAirports rows, loaded with the real loader script.
+"$ROOT/.github/scripts/load-airports.sh" "host=$WORK port=$PORT user=postgres dbname=postgres" "$ROOT/db-test/airports_sample.csv" >/dev/null 2>&1 \
+  || { echo "airport loader failed"; exit 1; }
 for t in "$ROOT"/supabase/tests/*.sql; do echo "test: $(basename "$t")"; "${PSQL[@]}" -t -A -f "$t" | grep -v '^$'; done
 DENO="${DENO:-$(command -v deno || true)}"
 if [ -n "$DENO" ]; then

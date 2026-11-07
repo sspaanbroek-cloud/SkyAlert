@@ -31,7 +31,7 @@ export interface SpotRow {
 	updated_at: string;
 }
 
-export async function mockBackend(page: Page, opts: { elevationM?: number | null; weather?: unknown[]; passes?: unknown[]; regulars?: unknown[]; forecast?: unknown[] } = {}) {
+export async function mockBackend(page: Page, opts: { elevationM?: number | null; weather?: unknown[]; passes?: unknown[]; regulars?: unknown[]; forecast?: unknown[]; airports?: Record<string, unknown[]> } = {}) {
 	const spots: SpotRow[] = [];
 	const writes: { method: string; body: unknown }[] = [];
 	const alerts: { prediction_id: number; manual: boolean; notify_at: string; spot_id: string }[] = [];
@@ -89,6 +89,12 @@ export async function mockBackend(page: Page, opts: { elevationM?: number | null
 		const { p_spot_id } = route.request().postDataJSON() as { p_spot_id: string };
 		writes.push({ method: 'RPC nearby_weather', body: p_spot_id });
 		return json(route, 200, opts.weather ?? []);
+	});
+
+	await page.route(`${SUPABASE}/rest/v1/rpc/find_airport`, async (route) => {
+		const { p_code } = route.request().postDataJSON() as { p_code: string };
+		writes.push({ method: 'RPC find_airport', body: p_code });
+		return json(route, 200, opts.airports?.[p_code.trim().toUpperCase()] ?? []);
 	});
 
 	await page.route(`${SUPABASE}/rest/v1/rpc/nearby_forecast`, (route) => json(route, 200, opts.forecast ?? []));

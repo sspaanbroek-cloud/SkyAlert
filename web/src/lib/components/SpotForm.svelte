@@ -1,6 +1,7 @@
 <script lang="ts">
 	import SpotMap from './SpotMap.svelte';
 	import { lookupElevationFt } from '#lib/elevation.ts';
+	import { airportPlace, findAirport, type AirportMatch } from '#lib/airports.ts';
 	import { formatLatLon, horizontalDistanceNm, isValidLatLon, type LatLon } from '#lib/geo.ts';
 	import { SPOT_DEFAULTS, browserTimeZone, timeZoneOptions, type SpotInput } from '#lib/spots.ts';
 
@@ -39,6 +40,38 @@
 	let error = $state('');
 	let map: SpotMap | undefined = $state();
 	let lookupCtl: AbortController | undefined;
+	let airportCode = $state('');
+	let airportMatches: AirportMatch[] = $state([]);
+	let airportBusy = $state(false);
+	let airportNote = $state('');
+
+	async function searchAirport() {
+		error = '';
+		airportNote = '';
+		airportMatches = [];
+		if (airportCode.trim().length < 2) {
+			error = 'Enter an airport code, for example KSEA, SEA or 0S9.';
+			return;
+		}
+		airportBusy = true;
+		try {
+			const found = await findAirport(airportCode);
+			if (found.length === 0) error = `No airport found for "${airportCode.trim().toUpperCase()}".`;
+			else if (found.length === 1) useAirport(found[0]);
+			else airportMatches = found;
+		} catch (e) {
+			error = (e as Error).message;
+		} finally {
+			airportBusy = false;
+		}
+	}
+
+	function useAirport(a: AirportMatch) {
+		airportMatches = [];
+		if (!name.trim()) name = `Near ${a.code}`;
+		setPoint({ lat: a.lat, lon: a.lon }, { refocus: true });
+		airportNote = `Pin placed at ${a.code}, ${a.name}. Drag it to where you'll stand.`;
+	}
 
 	async function setPoint(p: LatLon, opts: { refocus?: boolean } = {}) {
 		point = { lat: p.lat, lon: p.lon };
@@ -133,14 +166,41 @@
 	<label for="name">Name</label>
 	<input id="name" type="text" required maxlength="100" placeholder="e.g. Kubota Garden hill" bind:value={name} />
 
-	<label for="coords">Location</label>
-	<p class="hint" style="margin:0 0 8px">Tap the map to drop a pin, then drag it to fine-tune.</p>
+	<p class="label">Location</p>
+	<label for="airport" class="sublabel" style="margin-top:0">Start from an airport</label>
+	<div class="row coords">
+		<input
+			id="airport"
+			type="text"
+			autocapitalize="characters"
+			autocomplete="off"
+			spellcheck="false"
+			placeholder="Airport code, e.g. KSEA, SEA or 0S9"
+			bind:value={airportCode}
+			onkeydown={(e) => e.key === 'Enter' && (e.preventDefault(), searchAirport())}
+		/>
+		<button type="button" onclick={searchAirport} disabled={airportBusy}>{airportBusy ? 'Finding…' : 'Find'}</button>
+	</div>
+	{#if airportMatches.length}
+		<ul class="matches" aria-label="Airports found">
+			{#each airportMatches as a (a.ident)}
+				<li>
+					<button type="button" onclick={() => useAirport(a)}>
+						<strong>{a.code}</strong> {a.name}<span class="hint"> · {airportPlace(a)}</span>
+					</button>
+				</li>
+			{/each}
+		</ul>
+	{/if}
+	{#if airportNote}<p class="msg ok" role="status">{airportNote}</p>{/if}
+	<p class="sublabel" style="margin:12px 0 8px">Or tap the map to drop a pin, then drag it to fine-tune.</p>
 	<SpotMap bind:this={map} value={point} {radiusNm} onchange={(p) => setPoint(p)} />
 	<div class="row" style="margin-top:8px">
 		<button type="button" onclick={useMyLocation} disabled={locating}>
 			{locating ? 'Finding you…' : 'Use my location'}
 		</button>
 	</div>
+	<label for="coords" class="sublabel">Or type coordinates</label>
 	<div class="row coords">
 		<input
 			id="coords"
@@ -223,6 +283,30 @@
 </form>
 
 <style>
+	.label {
+		font-weight: 600;
+		margin: 16px 0 4px;
+	}
+	.sublabel {
+		font-weight: 400;
+		color: var(--muted);
+		font-size: 0.875rem;
+		margin: 12px 0 0;
+	}
+	.matches {
+		list-style: none;
+		padding: 0;
+		margin: 8px 0 0;
+		display: grid;
+		gap: 6px;
+	}
+	.matches button {
+		width: 100%;
+		justify-content: flex-start;
+		text-align: left;
+		font-weight: 400;
+		display: block;
+	}
 	.alerts {
 		border: 1px solid var(--border);
 		border-radius: var(--radius);

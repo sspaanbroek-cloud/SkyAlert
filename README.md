@@ -469,8 +469,13 @@ before they deliver app texts reliably.
 
 - Sign-in is email + password via Supabase Auth. If email confirmation is on
   (the default on hosted projects), sign-up shows "check your email".
-- The spot form: tap the map, drag the pin, "Use my location", or type
-  `lat, lon`. Ground elevation is looked up from the Open-Meteo elevation API
+- The spot form: start from an airport code (ICAO `KSEA`, IATA `SEA`,
+  or FAA `0S9`; several matches are listed to pick from), tap the map
+  (a "Tap the map to place your spot" label shows until a pin is placed),
+  drag the pin, "Use my location", or type `lat, lon`. Airports come from
+  `find_airport()` over `airport_directory`: about 48,000 airports from
+  [OurAirports](https://ourairports.com/data/) (public domain), refreshed by
+  Deploy backend (`.github/scripts/load-airports.sh`). Ground elevation is looked up from the Open-Meteo elevation API
   (free, no key) and can be overridden for rooftops; a typed value is never
   overwritten when the pin moves.
 - The map uses OpenStreetMap tiles by default. OSM's tile policy doesn't allow
